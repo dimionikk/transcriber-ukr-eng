@@ -5,8 +5,12 @@
 __pycache__/
 *.pyc
 
-# recorded transcripts (personal)
+# recorded transcripts + audio (personal)
 lecture_*.txt
+Записи/
 
-# scratch audio
+# scratch / stray audio
 *.wav
+*.ogg
+*.opus
+*.flac

@@ -1,18 +1,87 @@
 # Live lecture transcriber
 
 Records everything coming out of your speakers (Zoom / Meet / browser / any app),
-transcribes it on your RTX 3050 with Whisper `large-v3`, and appends timestamped
-lines to `lecture_YYYY-MM-DD.txt` in this folder. Keep that file open in an editor
-that auto-reloads (VS Code, Notepad++) and scroll back whenever you zone out.
+transcribes it on your RTX 3050 with Whisper `large-v3`, and writes timestamped
+lines you can scroll back through whenever you zone out.
 
-## Start / stop
+**Every run gets its own folder** under `Записи\`:
 
-- Desktop shortcuts: **"Транскрипція лекції (укр)"** / **"(англ)"**.
-- Or double-click **`start.bat`**, or run it from a terminal in this folder.
+    Записи\
+      Запис 10.09.2026\
+        Запис 10.09.2026.txt      <- the transcript
+        Запис 10.09.2026.ogg      <- the lecture audio, same timestamps
+      Запис 10.09.2026 (2)\        <- a second run the same day
+        ...
+
+So one lecture = one folder with the text and the sound together, nothing loose
+to hunt for. Keep the `.txt` open in an editor that auto-reloads (VS Code,
+Notepad++).
+
+- The **`.ogg`** is a compact (~13 MB/hour) copy of the lecture audio. When
+  Whisper garbles a term or formula, open it and jump to the timestamp from the
+  transcript to hear what was actually said. Turn off with `--no-audio`.
+
+And while it runs:
+
+- **Hotkeys** drop a marker into the transcript at the moment you press them, so
+  the spots you flagged are easy to find later:
+  `Ctrl+Alt+M` -> `⭐  ВАЖЛИВО  ⭐`, `Ctrl+Alt+K` -> `❓  НЕ ЗРОЗУМІВ  ❓`.
+  They work even when the console is minimised. Change with `--mark-key` /
+  `--confused-key` (pass `""` to disable one).
+- If the capture goes silent mid-lecture (headset disconnected and Windows moved
+  the default output), you get a **Windows notification** within ~20 s and a
+  `⚠️` line in the transcript; a `✅` line when audio comes back. Tune with
+  `--silence-alert SECONDS` (0 = off), `--no-toast` = console/transcript only.
+
+## Setup (new PC)
+
+1. Install **Python 3.11+** (64-bit) - tick *"Add python.exe to PATH"* in the
+   installer, or run `winget install -e --id Python.Python.3.12`.
+2. Copy this folder anywhere and run **`setup.bat`** (double-click). It makes a
+   `.venv`, installs every dependency (~1.5 GB, incl. the CUDA runtime) and
+   checks the imports.
+3. Run **`start.bat`**.
+
+You can skip step 2 - the first time `start.bat` sees no dependencies it asks
+*"Install everything now? [Y/n]"*, and on **Y** it runs `setup.bat` for you and
+then starts. An NVIDIA GPU is optional; without one it falls back to CPU.
+
+## Window (no console)
+
+Double-click **`Транскрипція.vbs`** - it opens a normal window (no console among
+your other terminals) that shows the transcription live:
+
+- Click the **☆** in the left margin of any line to flag it **★ important**. The
+  line is highlighted, and flagged lines are also collected into a sidecar file
+  `Запис ....важливо.txt` next to the transcript.
+- Right-click a line: mark / unmark, or copy just that line. `Ctrl+M` flags the
+  last line.
+- Menu **Правка**: *Виділити весь текст* (Ctrl+A), *Копіювати виділене*,
+  *Скопіювати весь транскрипт*, *Скопіювати лише важливі рядки*.
+- Menu **Файл**: open the recording folder / the `.ogg`, *Зберегти … як…*.
+- Status bar shows the capture device, elapsed time, line and mark counts, and
+  turns red if the sound drops out.
+- A red line in the transcript = capture went silent (check the Windows output
+  device). Closing the window stops the recording and finalises the files.
+
+To pass options to the window, use **`gui.bat --language uk --prompt "..."`**
+(it closes its own console right after launching).
+
+## Console version / start-stop
+
+- Double-click **`start.bat`** (or run it from a terminal) for the plain
+  console tool - same engine, no window.
+- Older desktop shortcuts **"Транскрипція лекції (укр)"** / **"(англ)"** still
+  point at the console tool; repoint them to `Транскрипція.vbs` for the window.
 - Stop with **Ctrl+C** (or just close the window). The transcript is saved
   continuously, so nothing is lost if it crashes.
+- Each run gets its own folder `Записи\Запис DD.MM.YYYY\` with the transcript and
+  audio inside. Sit through a lecture, close the transcriber, and that folder is
+  your record of it.
 
 ## Options
+
+The same flags work for the window: `gui.bat --language uk ...`
 
     start.bat --language uk        force Ukrainian (or: en; default: auto-detect)
     start.bat --prompt "тема: перетворення Фур'є, лектор Іваненко, GMRES, SVD"
@@ -25,6 +94,10 @@ that auto-reloads (VS Code, Notepad++) and scroll back whenever you zone out.
     start.bat --min-silence 0.4   pause length that ends a line
     start.bat --list-devices      list capture devices
     start.bat --device-index 19   capture a specific device
+    start.bat --no-audio          transcript only, skip the .ogg audio copy
+    start.bat --mark-key ctrl+alt+space   rebind the "important" marker hotkey
+    start.bat --silence-alert 30  seconds of no audio before it warns you (0 = off)
+    start.bat --no-toast          silence warning in console/transcript only
 
 ## Speed / quality balance (current defaults)
 
@@ -49,12 +122,21 @@ For acronyms / names, always pass `--prompt "..."` - it helps more than any sett
   a few seconds.
 - A silent keep-alive tone is played to your output device so capture keeps
   working during pauses. It is inaudible. Disable with `--no-keepalive`.
+- The `.ogg` audio copy needs `soundfile`; the marker hotkeys need `keyboard`
+  (both in `requirements.txt`). If either package is missing that feature just
+  logs a line and switches itself off - the transcript still works.
+- The silence notification is a plain Windows toast raised via PowerShell; no
+  extra package needed.
+- The window (`gui.py`) uses `tkinter`, which ships with Python - nothing to
+  install. `transcribe.py` is the shared engine; the window and the console are
+  just two front-ends for it.
 - Everything runs locally - no audio is sent anywhere.
 
 ## If it picks the wrong audio device / no text appears
 
 If your headphones disconnect, Windows can switch the default output to another
-device and the tool then captures silence. It prints a WARNING after ~8 s if it
-sees no audio. Fix: run `start.bat --list-devices`, find the `[Loopback]` entry
-for the output you actually listen through, and pass its number:
+device and the tool then captures silence. You'll get a Windows notification and
+a `⚠️` line in the transcript (see `--silence-alert`). Fix: run
+`start.bat --list-devices`, find the `[Loopback]` entry for the output you
+actually listen through, and pass its number:
 `start.bat --language uk --device-index N`.
