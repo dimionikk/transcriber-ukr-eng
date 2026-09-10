@@ -50,12 +50,14 @@ hand.
 Double-click **`Транскрипція.vbs`** - a normal window, no console among your
 other terminals.
 
-**Start panel.** Pick the **language** (English / Українська / auto), a
-**speed-vs-quality** profile (large-v3 / medium / small), optionally type a
-**hint** with rare words (topic, names, acronyms - biggest accuracy win),
-toggle audio copy / silence alerts / marker hotkeys, then press **▶ Почати**.
-Your choices are remembered for next time. *Додатково* hides the output-device
-picker and an auto-stop timer.
+**Start panel.** Pick the **language** (Українська / English - you switch it
+yourself when a lecture is in the other one), toggle audio copy / silence alerts
+/ marker hotkeys, then press **▶ Почати**. It always runs the best model
+(`large-v3`). Your choices are remembered for next time. *Додатково* hides the
+output-device picker and an auto-stop timer.
+
+For a one-off rare-words hint or a lighter model, launch from
+`gui.bat --prompt "..." --model medium` instead.
 
 **While recording.**
 

@@ -2,9 +2,9 @@
 Lecture transcriber - one window.
 
 On launch it checks the components; when they are all present it shows a small
-control panel where you pick a mode (English / Ukrainian / auto), a
-speed-vs-quality profile and a few quick options, press "Почати", and the
-transcription starts right there in the same window.
+control panel where you pick the language (Ukrainian / English) and a few quick
+options, press "Почати", and the transcription starts right there in the same
+window. It always runs the best model (large-v3).
 
 No console. Run with pythonw (see Транскрипція.vbs) or:  pythonw gui.py
 """
@@ -94,12 +94,7 @@ def check_components():
     return rows, ok
 
 
-PROFILES = {  # label -> (model, compute_type, beam_size)
-    "Найкраща якість": ("large-v3", "float16", 5),
-    "Збалансовано": ("medium", "float16", 5),
-    "Швидко (для слабкого ПК)": ("small", "int8_float16", 1),
-}
-LANGS = [("Автовизначення", None), ("Українська", "uk"), ("English", "en")]
+LANGS = [("Українська", "uk"), ("English", "en")]
 
 STAR_ON, STAR_OFF = "★ ", "☆ "
 
@@ -152,34 +147,19 @@ class StartPanel(ttk.Frame):
 
         ttk.Label(opt, text="Мова лекції", font=("Segoe UI", 10, "bold")
                   ).grid(row=0, column=0, sticky="w", pady=(0, 2))
-        self.lang = tk.StringVar(value=s.get("language", "") or "")
+        self.lang = tk.StringVar(value=s.get("language") or "uk")
         lf = ttk.Frame(opt)
         lf.grid(row=1, column=0, sticky="w", pady=(0, 10))
         for label, code in LANGS:
-            ttk.Radiobutton(lf, text=label, value=code or "", variable=self.lang,
+            ttk.Radiobutton(lf, text=label, value=code, variable=self.lang,
                             style="Toolbutton").pack(side="left", padx=(0, 4))
-
-        ttk.Label(opt, text="Швидкість / якість", font=("Segoe UI", 10, "bold")
-                  ).grid(row=2, column=0, sticky="w", pady=(0, 2))
-        self.profile = tk.StringVar(value=s.get("profile", "Найкраща якість"))
-        pf = ttk.Frame(opt)
-        pf.grid(row=3, column=0, sticky="w", pady=(0, 10))
-        for label in PROFILES:
-            ttk.Radiobutton(pf, text=label, value=label, variable=self.profile,
-                            style="Toolbutton").pack(side="left", padx=(0, 4))
-
-        ttk.Label(opt, text="Підказка для рідкісних слів (тема, прізвища, скорочення)",
-                  font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w")
-        self.prompt = tk.StringVar(value=s.get("prompt", ""))
-        ttk.Entry(opt, textvariable=self.prompt, width=64).grid(
-            row=5, column=0, sticky="we", pady=(2, 10))
         opt.columnconfigure(0, weight=1)
 
         self.audio = tk.BooleanVar(value=s.get("audio", True))
         self.silence = tk.BooleanVar(value=s.get("silence", True))
         self.hotkeys = tk.BooleanVar(value=s.get("hotkeys", True))
         cf = ttk.Frame(opt)
-        cf.grid(row=6, column=0, sticky="w")
+        cf.grid(row=2, column=0, sticky="w")
         ttk.Checkbutton(cf, text="Зберігати аудіозапис", variable=self.audio
                         ).pack(side="left", padx=(0, 12))
         ttk.Checkbutton(cf, text="Сповіщати, якщо зник звук", variable=self.silence
@@ -191,7 +171,7 @@ class StartPanel(ttk.Frame):
         self.adv_open = tk.BooleanVar(value=False)
         self.adv_btn = ttk.Checkbutton(opt, text="Додатково", style="Toolbutton",
                                        variable=self.adv_open, command=self._toggle_adv)
-        self.adv_btn.grid(row=7, column=0, sticky="w", pady=(10, 0))
+        self.adv_btn.grid(row=3, column=0, sticky="w", pady=(10, 0))
         self.adv = ttk.Frame(opt)
         ttk.Label(self.adv, text="Пристрій виводу").grid(row=0, column=0, sticky="w")
         self.device = tk.StringVar(value="За замовчуванням")
@@ -299,7 +279,7 @@ class StartPanel(ttk.Frame):
     # ---- advanced toggle -------------------------------------
     def _toggle_adv(self):
         if self.adv_open.get():
-            self.adv.grid(row=8, column=0, sticky="we", pady=(4, 0))
+            self.adv.grid(row=4, column=0, sticky="we", pady=(4, 0))
         else:
             self.adv.grid_forget()
 
@@ -330,14 +310,8 @@ class StartPanel(ttk.Frame):
         if T is None:
             messagebox.showerror("Транскрипція лекції", "Двигун ще не готовий.")
             return
-        model, compute, beam = PROFILES.get(self.profile.get(),
-                                            PROFILES["Найкраща якість"])
-        args = T.default_args()
-        args.language = self.lang.get() or None
-        args.model = model
-        args.compute_type = compute
-        args.beam_size = beam
-        args.prompt = self.prompt.get().strip() or None
+        args = T.default_args()          # model large-v3 / float16 / beam 5
+        args.language = self.lang.get() or "uk"
         args.no_audio = not self.audio.get()
         args.silence_alert = 20.0 if self.silence.get() else 0.0
         args.no_toast = not self.silence.get()
@@ -356,8 +330,7 @@ class StartPanel(ttk.Frame):
             args.duration = 0.0
 
         save_settings({
-            "language": self.lang.get(), "profile": self.profile.get(),
-            "prompt": self.prompt.get(), "audio": self.audio.get(),
+            "language": self.lang.get(), "audio": self.audio.get(),
             "silence": self.silence.get(), "hotkeys": self.hotkeys.get(),
             "duration": args.duration,
         })
@@ -684,8 +657,7 @@ class MainWindow:
     def _help(self):
         messagebox.showinfo(
             "Як користуватися",
-            "1. На панелі оберіть мову й профіль швидкості, за потреби впишіть\n"
-            "   підказку з рідкісними словами, натисніть «Почати».\n"
+            "1. На панелі оберіть мову лекції й натисніть «Почати».\n"
             "2. Текст лекції зʼявляється сам, поки грає звук.\n"
             "3. Клац по зірці ☆ ліворуч від рядка — позначити важливим (★).\n"
             "   Права кнопка — меню + копіювати рядок. Ctrl+M — останній рядок.\n"
