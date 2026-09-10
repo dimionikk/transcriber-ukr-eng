@@ -33,39 +33,49 @@ And while it runs:
   `⚠️` line in the transcript; a `✅` line when audio comes back. Tune with
   `--silence-alert SECONDS` (0 = off), `--no-toast` = console/transcript only.
 
-## Setup (new PC)
+## First run (new PC)
 
 1. Install **Python 3.11+** (64-bit) - tick *"Add python.exe to PATH"* in the
    installer, or run `winget install -e --id Python.Python.3.12`.
-2. Copy this folder anywhere and run **`setup.bat`** (double-click). It makes a
-   `.venv`, installs every dependency (~1.5 GB, incl. the CUDA runtime) and
-   checks the imports.
-3. Run **`start.bat`**.
+2. Copy this folder anywhere and double-click **`Транскрипція.vbs`**.
 
-You can skip step 2 - the first time `start.bat` sees no dependencies it asks
-*"Install everything now? [Y/n]"*, and on **Y** it runs `setup.bat` for you and
-then starts. An NVIDIA GPU is optional; without one it falls back to CPU.
+That's it. The window opens, checks its components, and if anything is missing
+it shows a **"Встановити / полагодити"** button that installs everything
+(~1.5 GB, a few minutes) and re-checks. An NVIDIA GPU is optional; without one
+it runs on CPU (slower). `setup.bat` still exists if you prefer to run it by
+hand.
 
-## Window (no console)
+## The window
 
-Double-click **`Транскрипція.vbs`** - it opens a normal window (no console among
-your other terminals) that shows the transcription live:
+Double-click **`Транскрипція.vbs`** - a normal window, no console among your
+other terminals.
 
-- Click the **☆** in the left margin of any line to flag it **★ important**. The
-  line is highlighted, and flagged lines are also collected into a sidecar file
+**Start panel.** Pick the **language** (English / Українська / auto), a
+**speed-vs-quality** profile (large-v3 / medium / small), optionally type a
+**hint** with rare words (topic, names, acronyms - biggest accuracy win),
+toggle audio copy / silence alerts / marker hotkeys, then press **▶ Почати**.
+Your choices are remembered for next time. *Додатково* hides the output-device
+picker and an auto-stop timer.
+
+**While recording.**
+
+- The transcript fills in live.
+- Click the **☆** in the left margin of a line to flag it **★ important** - the
+  line is highlighted and flagged lines are also written to a sidecar file
   `Запис ....важливо.txt` next to the transcript.
 - Right-click a line: mark / unmark, or copy just that line. `Ctrl+M` flags the
   last line.
-- Menu **Правка**: *Виділити весь текст* (Ctrl+A), *Копіювати виділене*,
-  *Скопіювати весь транскрипт*, *Скопіювати лише важливі рядки*.
-- Menu **Файл**: open the recording folder / the `.ogg`, *Зберегти … як…*.
-- Status bar shows the capture device, elapsed time, line and mark counts, and
-  turns red if the sound drops out.
-- A red line in the transcript = capture went silent (check the Windows output
-  device). Closing the window stops the recording and finalises the files.
+- Menu **Правка**: select all (Ctrl+A), copy selection, **copy the whole
+  transcript**, **copy only the important lines**.
+- Menu **Файл**: open the recording folder / the `.ogg`, save the transcript
+  (or just the important lines) elsewhere.
+- Status bar: device, elapsed, line and mark counts; turns red (and a red line
+  appears) if the sound drops out.
+- **⏹ Зупинити** stops the recording, saves the files, and returns to the start
+  panel so you can begin another lecture.
 
-To pass options to the window, use **`gui.bat --language uk --prompt "..."`**
-(it closes its own console right after launching).
+To launch straight past the panel with fixed options:
+**`gui.bat --language uk --prompt "..."`** (its console closes itself).
 
 ## Console version / start-stop
 

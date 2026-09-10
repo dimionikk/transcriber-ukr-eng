@@ -752,6 +752,28 @@ class Session:
             self._emit("ended", None, self.outfile or "")
 
 
+def default_args():
+    """A fresh argparse.Namespace with every option at its default -- the
+    starting point the window tweaks before handing it to a Session."""
+    return build_parser().parse_args([])
+
+
+def loopback_devices():
+    """[(index, label), ...] of loopback capture devices, for a picker. Best-effort."""
+    out = []
+    try:
+        pa = pyaudio.PyAudio()
+        try:
+            for lb in pa.get_loopback_device_info_generator():
+                out.append((int(lb["index"]),
+                            f'{lb["name"]}  ({int(lb["defaultSampleRate"])} Hz)'))
+        finally:
+            pa.terminate()
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

@@ -14,3 +14,6 @@ lecture_*.txt
 *.ogg
 *.opus
 *.flac
+
+# window settings (per-user)
+gui_settings.json
