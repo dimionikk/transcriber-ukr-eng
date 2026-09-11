@@ -5,11 +5,11 @@
 __pycache__/
 *.pyc
 
-# recorded transcripts + audio (personal)
+# recorded transcripts (personal)
 lecture_*.txt
 Записи/
 
-# scratch / stray audio
+# stray scratch audio, if any
 *.wav
 *.ogg
 *.opus

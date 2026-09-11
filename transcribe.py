@@ -6,11 +6,9 @@ transcribes it in near real time with faster-whisper on the GPU, and appends
 timestamped lines to a text file you can keep open and scroll back through.
 
 Each run gets its own folder, 'Записи/Запис DD.MM.YYYY/', holding that session's
-transcript and audio copy together -- nothing loose to hunt for.
+transcript -- nothing loose to hunt for.
 
 While it runs it also:
-  * records a compact audio copy in the same folder as the transcript, so you can
-    re-listen to any timestamp where Whisper garbled a term (disable --no-audio);
   * listens for global hotkeys that drop a marker line into the transcript at the
     current time -- Ctrl+Alt+M = "important", Ctrl+Alt+K = "did not get this"
     (change with --mark-key / --confused-key, empty string disables);
@@ -28,7 +26,6 @@ Usage:
     python transcribe.py --model medium   # smaller / faster model
     python transcribe.py --duration 90    # stop automatically after 90 minutes
     python transcribe.py --prompt "..."   # hint rare terms (topic, names, jargon)
-    python transcribe.py --no-audio       # transcript only, no audio copy
 
 Stop anytime with Ctrl+C. The transcript is flushed to disk continuously.
 """
@@ -79,13 +76,6 @@ FRAME_MS = 30                # granularity for the silence detector
 SILENCE_RMS = 260            # int16 RMS below this counts as "silence"
 SMARTCUT_WINDOW = 1.2        # seconds to search for a quiet spot when force-cutting
 
-# Audio-copy container / codec, tried in order (format, subtype, extension).
-AUDIO_CANDIDATES = [
-    ("OGG", "OPUS", ".ogg"),
-    ("OGG", "VORBIS", ".ogg"),
-    ("FLAC", "PCM_16", ".flac"),
-]
-
 RECORDS_DIRNAME = "Записи"
 
 
@@ -104,9 +94,7 @@ def script_dir() -> str:
 
 def new_session_dir(folder: str) -> str:
     """Create and return a fresh per-session folder inside 'Записи':
-    'Запис DD.MM.YYYY' (then ' (2)', ' (3)', ... for more runs the same day).
-    This run's transcript and audio copy both go inside it, so a session is one
-    self-contained folder instead of loose files to hunt for."""
+    'Запис DD.MM.YYYY' (then ' (2)', ' (3)', ... for more runs the same day)."""
     base = os.path.join(folder, RECORDS_DIRNAME, f"Запис {dt.date.today():%d.%m.%Y}")
     n = 1
     while True:
@@ -301,85 +289,6 @@ def to_mono_16k(buf: np.ndarray, src_rate: int, channels: int) -> np.ndarray:
     return buf
 
 
-class AudioWriter(threading.Thread):
-    """Downmixes the captured stream to mono 16 kHz and streams it into a compact
-    OGG/Opus file next to the transcript, so any timestamp can be re-listened to.
-    Bounded queue: if encoding ever falls behind it drops audio rather than grow
-    memory -- the transcript is the source of truth, the recording is a backup."""
-
-    def __init__(self, base_path: str, src_rate: int, channels: int):
-        super().__init__(daemon=True)
-        self.src_rate = src_rate
-        self.channels = max(1, channels)
-        self.in_q: "queue.Queue" = queue.Queue(maxsize=4000)  # ~2 min buffer
-        self.path = None
-        self._subtype = None
-        self._base = base_path
-        self._enabled = True
-        self._dropped = 0
-
-    def _open(self):
-        import soundfile as sf
-        avail = set(sf.available_subtypes("OGG")) | set(sf.available_subtypes("FLAC"))
-        for fmt, subtype, ext in AUDIO_CANDIDATES:
-            if subtype not in avail:
-                continue
-            try:
-                handle = sf.SoundFile(
-                    self._base + ext, mode="w", samplerate=TARGET_RATE,
-                    channels=1, format=fmt, subtype=subtype)
-                self.path = self._base + ext
-                self._subtype = f"{fmt}/{subtype}"
-                return handle
-            except Exception:  # noqa: BLE001
-                continue
-        raise RuntimeError("libsndfile can't write OGG or FLAC here")
-
-    def feed(self, raw: bytes) -> None:
-        if not self._enabled:
-            return
-        try:
-            self.in_q.put_nowait(raw)
-        except queue.Full:
-            self._dropped += 1
-
-    def run(self) -> None:
-        try:
-            handle = self._open()
-        except Exception as exc:  # noqa: BLE001
-            log(f"audio copy disabled ({exc})")
-            self._enabled = False
-            while self.in_q.get() is not None:  # drain until stop()
-                pass
-            return
-
-        log(f"recording audio -> {self.path}  ({self._subtype})")
-        buf = np.empty(0, dtype=np.int16)
-        batch = self.src_rate * self.channels  # resample ~1 s at a time
-        try:
-            while True:
-                item = self.in_q.get()
-                if item is None:
-                    break
-                buf = np.concatenate((buf, np.frombuffer(item, dtype=np.int16)))
-                if buf.size >= batch:
-                    n = (buf.size // self.channels) * self.channels
-                    chunk, buf = buf[:n], buf[n:].copy()
-                    handle.write(to_mono_16k(chunk, self.src_rate, self.channels))
-            if buf.size >= self.channels:
-                n = (buf.size // self.channels) * self.channels
-                handle.write(to_mono_16k(buf[:n], self.src_rate, self.channels))
-        except Exception as exc:  # noqa: BLE001
-            log(f"audio copy stopped early: {exc}")
-        finally:
-            handle.close()
-        if self._dropped:
-            log(f"audio copy: dropped {self._dropped} blocks (encoder fell behind)")
-
-    def stop(self) -> None:
-        self.in_q.put(None)
-
-
 def load_model(preferred: str, compute_type: str):
     """Try the preferred setup, fall back to smaller / CPU configs."""
     from faster_whisper import WhisperModel
@@ -552,7 +461,6 @@ class Session:
         self._sink = None
         # populated as the session comes up:
         self.outfile = None
-        self.audio_path = None
         self.device_name = None
         self.started_at = None
         self.silent = False
@@ -589,7 +497,7 @@ class Session:
     def _run(self) -> None:
         args = self.args
         pa = pyaudio.PyAudio()
-        keepalive = rec = worker = marker = audio_writer = fout = sink = None
+        keepalive = rec = worker = marker = fout = sink = None
         pending = np.empty(0, dtype=np.int16)
         try:
             dev, render = pick_loopback(pa, args.device_index)
@@ -623,10 +531,6 @@ class Session:
             banner = f"===== session started {dt.datetime.now():%Y-%m-%d %H:%M:%S} =====\n"
             sink.write_raw(banner if fresh else "\n" + banner)
             self._emit("info", None, f"transcript → {outfile}")
-
-            if not args.no_audio:
-                audio_writer = AudioWriter(os.path.splitext(outfile)[0], src_rate, channels)
-                audio_writer.start()
 
             worker = Transcriber(model, args, src_rate, channels, sink,
                                  on_line=lambda ts, txt: self._emit("line", ts, txt))
@@ -686,11 +590,6 @@ class Session:
                         break
                     continue
 
-                if audio_writer is not None:
-                    audio_writer.feed(data)
-                    if self.audio_path is None and audio_writer.path:
-                        self.audio_path = audio_writer.path
-
                 block = np.frombuffer(data, dtype=np.int16)
                 pending = np.concatenate((pending, block))
 
@@ -735,11 +634,6 @@ class Session:
                         pass
                     worker.in_q.put(None)
                     worker.join(timeout=30)
-                if audio_writer:
-                    audio_writer.stop()
-                    audio_writer.join(timeout=30)
-                    if audio_writer.path:
-                        log(f"audio saved to {audio_writer.path}")
                 if sink:
                     sink.write_raw(
                         f"===== session ended {dt.datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
@@ -792,8 +686,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="beam search width: 5 = accurate (default), 1 = fastest")
     ap.add_argument("--outfile", default=None,
                     help="append to this exact file instead of creating a new "
-                         "per-session folder 'Записи/Запис DD.MM.YYYY/' (audio "
-                         "goes next to whatever file you name here)")
+                         "per-session folder 'Записи/Запис DD.MM.YYYY/'")
     ap.add_argument("--duration", type=float, default=0.0,
                     help="stop automatically after this many minutes (0 = run until Ctrl+C)")
     ap.add_argument("--min-silence", type=float, default=0.6,
@@ -802,8 +695,6 @@ def build_parser() -> argparse.ArgumentParser:
                     help="force-flush a segment after this many seconds (default: 18)")
     ap.add_argument("--no-keepalive", action="store_true",
                     help="do not play silent keep-alive audio to the output device")
-    ap.add_argument("--no-audio", action="store_true",
-                    help="do not save the compact audio copy next to the transcript")
     ap.add_argument("--mark-key", default="ctrl+alt+m",
                     help="global hotkey that writes an 'important' marker "
                          "(default: ctrl+alt+m; empty string disables)")

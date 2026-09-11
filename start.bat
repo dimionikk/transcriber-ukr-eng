@@ -10,7 +10,7 @@ REM --- first run / fresh PC: install dependencies before starting ---
 set "NEEDSETUP="
 if not exist "%VPY%" set "NEEDSETUP=1"
 if not defined NEEDSETUP (
-    "%VPY%" -c "import faster_whisper, pyaudiowpatch, soundfile, keyboard" >nul 2>&1 || set "NEEDSETUP=1"
+    "%VPY%" -c "import faster_whisper, pyaudiowpatch, keyboard" >nul 2>&1 || set "NEEDSETUP=1"
 )
 if defined NEEDSETUP (
     echo Dependencies for the lecture transcriber are not installed yet.

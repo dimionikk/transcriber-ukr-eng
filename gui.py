@@ -53,7 +53,6 @@ COMPONENTS = [
     ("Двигун розпізнавання (faster-whisper)", "faster_whisper", True),
     ("Захоплення звуку (PyAudioWPatch)", "pyaudiowpatch", True),
     ("Обробка сигналу (numpy / scipy)", "scipy", True),
-    ("Запис аудіо (soundfile)", "soundfile", True),
     ("Гарячі клавіші-мітки (keyboard)", "keyboard", False),
 ]
 
@@ -155,13 +154,10 @@ class StartPanel(ttk.Frame):
                             style="Toolbutton").pack(side="left", padx=(0, 4))
         opt.columnconfigure(0, weight=1)
 
-        self.audio = tk.BooleanVar(value=s.get("audio", True))
         self.silence = tk.BooleanVar(value=s.get("silence", True))
         self.hotkeys = tk.BooleanVar(value=s.get("hotkeys", True))
         cf = ttk.Frame(opt)
         cf.grid(row=2, column=0, sticky="w")
-        ttk.Checkbutton(cf, text="Зберігати аудіозапис", variable=self.audio
-                        ).pack(side="left", padx=(0, 12))
         ttk.Checkbutton(cf, text="Сповіщати, якщо зник звук", variable=self.silence
                         ).pack(side="left", padx=(0, 12))
         ttk.Checkbutton(cf, text="Гарячі клавіші-мітки", variable=self.hotkeys
@@ -330,7 +326,6 @@ class StartPanel(ttk.Frame):
             return
         args = T.default_args()          # model large-v3 / float16 / beam 5
         args.language = self.lang.get() or "uk"
-        args.no_audio = not self.audio.get()
         args.silence_alert = 20.0 if self.silence.get() else 0.0
         args.no_toast = not self.silence.get()
         if not self.hotkeys.get():
@@ -348,9 +343,8 @@ class StartPanel(ttk.Frame):
             args.duration = 0.0
 
         save_settings({
-            "language": self.lang.get(), "audio": self.audio.get(),
-            "silence": self.silence.get(), "hotkeys": self.hotkeys.get(),
-            "duration": args.duration,
+            "language": self.lang.get(), "silence": self.silence.get(),
+            "hotkeys": self.hotkeys.get(), "duration": args.duration,
         })
         self.on_start(args)
 
@@ -535,11 +529,6 @@ class TranscriptView(ttk.Frame):
         if out and os.path.isdir(os.path.dirname(out)):
             os.startfile(os.path.dirname(out))  # noqa: S606
 
-    def open_audio(self):
-        p = self.session.audio_path
-        if p and os.path.exists(p):
-            os.startfile(p)  # noqa: S606
-
     def save_as(self, important_only=False):
         p = filedialog.asksaveasfilename(
             defaultextension=".txt", filetypes=[("Текст", "*.txt")],
@@ -642,7 +631,6 @@ class MainWindow:
         m = tk.Menu(self.root)
         f = tk.Menu(m, tearoff=0)
         f.add_command(label="Відкрити папку запису", command=self._m(lambda v: v.open_folder()))
-        f.add_command(label="Відкрити аудіозапис", command=self._m(lambda v: v.open_audio()))
         f.add_separator()
         f.add_command(label="Зберегти транскрипт як…",
                       command=self._m(lambda v: v.save_as(False)))

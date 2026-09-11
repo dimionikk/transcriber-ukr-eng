@@ -7,7 +7,6 @@ faster-whisper==1.2.1
 PyAudioWPatch==0.2.12.8
 scipy==1.18.1
 numpy==2.5.3
-soundfile==0.14.0        # compact OGG/Opus copy of the lecture audio
 keyboard==0.13.5         # global hotkeys for in-transcript markers
 
 # CUDA runtime libs for GPU inference (CTranslate2 loads these; Windows/Linux x86-64)

@@ -9,17 +9,10 @@ lines you can scroll back through whenever you zone out.
     Записи\
       Запис 10.09.2026\
         Запис 10.09.2026.txt      <- the transcript
-        Запис 10.09.2026.ogg      <- the lecture audio, same timestamps
       Запис 10.09.2026 (2)\        <- a second run the same day
         ...
 
-So one lecture = one folder with the text and the sound together, nothing loose
-to hunt for. Keep the `.txt` open in an editor that auto-reloads (VS Code,
-Notepad++).
-
-- The **`.ogg`** is a compact (~13 MB/hour) copy of the lecture audio. When
-  Whisper garbles a term or formula, open it and jump to the timestamp from the
-  transcript to hear what was actually said. Turn off with `--no-audio`.
+Keep the `.txt` open in an editor that auto-reloads (VS Code, Notepad++).
 
 And while it runs:
 
@@ -51,8 +44,8 @@ Double-click **`Транскрипція.vbs`** - a normal window, no console am
 other terminals.
 
 **Start panel.** Pick the **language** (Українська / English - you switch it
-yourself when a lecture is in the other one), toggle audio copy / silence alerts
-/ marker hotkeys, then press **▶ Почати**. It always runs the best model
+yourself when a lecture is in the other one), toggle silence alerts / marker
+hotkeys, then press **▶ Почати**. It always runs the best model
 (`large-v3`). Your choices are remembered for next time. *Додатково* hides the
 output-device picker and an auto-stop timer.
 
@@ -69,8 +62,8 @@ For a one-off rare-words hint or a lighter model, launch from
   last line.
 - Menu **Правка**: select all (Ctrl+A), copy selection, **copy the whole
   transcript**, **copy only the important lines**.
-- Menu **Файл**: open the recording folder / the `.ogg`, save the transcript
-  (or just the important lines) elsewhere.
+- Menu **Файл**: open the recording folder, save the transcript (or just the
+  important lines) elsewhere.
 - Status bar: device, elapsed, line and mark counts; turns red (and a red line
   appears) if the sound drops out.
 - **⏹ Зупинити** stops the recording, saves the files, and returns to the start
@@ -87,9 +80,9 @@ To launch straight past the panel with fixed options:
   point at the console tool; repoint them to `Транскрипція.vbs` for the window.
 - Stop with **Ctrl+C** (or just close the window). The transcript is saved
   continuously, so nothing is lost if it crashes.
-- Each run gets its own folder `Записи\Запис DD.MM.YYYY\` with the transcript and
-  audio inside. Sit through a lecture, close the transcriber, and that folder is
-  your record of it.
+- Each run gets its own folder `Записи\Запис DD.MM.YYYY\` with the transcript
+  inside. Sit through a lecture, close the transcriber, and that folder is your
+  record of it.
 
 ## Options
 
@@ -106,7 +99,6 @@ The same flags work for the window: `gui.bat --language uk ...`
     start.bat --min-silence 0.4   pause length that ends a line
     start.bat --list-devices      list capture devices
     start.bat --device-index 19   capture a specific device
-    start.bat --no-audio          transcript only, skip the .ogg audio copy
     start.bat --mark-key ctrl+alt+space   rebind the "important" marker hotkey
     start.bat --silence-alert 30  seconds of no audio before it warns you (0 = off)
     start.bat --no-toast          silence warning in console/transcript only
@@ -134,9 +126,9 @@ For acronyms / names, always pass `--prompt "..."` - it helps more than any sett
   a few seconds.
 - A silent keep-alive tone is played to your output device so capture keeps
   working during pauses. It is inaudible. Disable with `--no-keepalive`.
-- The `.ogg` audio copy needs `soundfile`; the marker hotkeys need `keyboard`
-  (both in `requirements.txt`). If either package is missing that feature just
-  logs a line and switches itself off - the transcript still works.
+- The marker hotkeys need `keyboard` (in `requirements.txt`). If it's missing
+  that feature just logs a line and switches itself off - the transcript still
+  works.
 - The silence notification is a plain Windows toast raised via PowerShell; no
   extra package needed.
 - The window (`gui.py`) uses `tkinter`, which ships with Python - nothing to

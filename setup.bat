@@ -73,7 +73,7 @@ if errorlevel 1 (
 rem ---- 5. verify ------------------------------------------
 echo.
 echo [i] Verifying ...
-"%VPY%" -c "import faster_whisper, pyaudiowpatch, scipy, numpy, soundfile, keyboard; print('    all core packages import OK')"
+"%VPY%" -c "import faster_whisper, pyaudiowpatch, scipy, numpy, keyboard; print('    all core packages import OK')"
 if errorlevel 1 (
     echo [X] Something is still missing. Delete .venv and run setup.bat once more.
     pause

@@ -11,7 +11,7 @@ set "VPYW=.venv\Scripts\pythonw.exe"
 set "NEEDSETUP="
 if not exist "%VPY%" set "NEEDSETUP=1"
 if not defined NEEDSETUP (
-    "%VPY%" -c "import faster_whisper, pyaudiowpatch, soundfile" >nul 2>&1 || set "NEEDSETUP=1"
+    "%VPY%" -c "import faster_whisper, pyaudiowpatch" >nul 2>&1 || set "NEEDSETUP=1"
 )
 if defined NEEDSETUP (
     echo Dependencies are not installed yet.
