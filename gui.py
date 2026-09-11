@@ -201,8 +201,26 @@ class StartPanel(ttk.Frame):
         if self.checking:
             return
         self.checking = True
+        self._check_started = time.monotonic()
         self.hint.config(text="Перевірка компонентів…")
         threading.Thread(target=self._do_check, daemon=True).start()
+        self.after(4000, self._check_watchdog)
+
+    def _check_watchdog(self):
+        # check_components() can genuinely take a while the very first time --
+        # Windows (Smart App Control) or an antivirus scans a freshly-installed
+        # .pyd it hasn't seen before, which can itself wait on a network call.
+        # Say so instead of leaving the panel looking frozen.
+        if not self.checking or not self.winfo_exists():
+            return
+        elapsed = time.monotonic() - self._check_started
+        if elapsed > 8:
+            self.hint.config(
+                text=f"Перевірка триває довше, ніж зазвичай ({elapsed:.0f} с) — "
+                     "схоже, Windows уперше перевіряє нові файли (Smart App "
+                     "Control) або мережа зараз повільна. Це одноразово, "
+                     "зачекайте — вікно не зависло.")
+        self.after(4000, self._check_watchdog)
 
     def _do_check(self):
         rows, ok = check_components()
