@@ -1,138 +1,43 @@
 # Live lecture transcriber
 
-Records everything coming out of your speakers (Zoom / Meet / browser / any app),
-transcribes it on your RTX 3050 with Whisper `large-v3`, and writes timestamped
-lines you can scroll back through whenever you zone out.
+Records whatever's coming out of your speakers (Zoom / Meet / browser) and
+transcribes it live with Whisper, so you can scroll back whenever you zone out.
 
-**Every run gets its own folder** under `Записи\`:
+## First run
 
-    Записи\
-      Запис 10.09.2026\
-        Запис 10.09.2026.txt      <- the transcript
-      Запис 10.09.2026 (2)\        <- a second run the same day
-        ...
+1. Install **Python 3.11+** (64-bit), ticking "Add python.exe to PATH".
+2. Double-click **`Транскрипція.vbs`**.
 
-Keep the `.txt` open in an editor that auto-reloads (VS Code, Notepad++).
+It checks its components and offers to install anything missing (~1.5 GB,
+one-time). An NVIDIA GPU is optional; without one it runs on CPU (slower).
 
-And while it runs:
+## Using it
 
-- **Hotkeys** drop a marker into the transcript at the moment you press them, so
-  the spots you flagged are easy to find later:
-  `Ctrl+Alt+M` -> `⭐  ВАЖЛИВО  ⭐`, `Ctrl+Alt+K` -> `❓  НЕ ЗРОЗУМІВ  ❓`.
-  They work even when the console is minimised. Change with `--mark-key` /
-  `--confused-key` (pass `""` to disable one).
-- If the capture goes silent mid-lecture (headset disconnected and Windows moved
-  the default output), you get a **Windows notification** within ~20 s and a
-  `⚠️` line in the transcript; a `✅` line when audio comes back. Tune with
-  `--silence-alert SECONDS` (0 = off), `--no-toast` = console/transcript only.
+Double-click **`Транскрипція.vbs`** to open the window:
 
-## First run (new PC)
+1. Pick the language (Українська / English) and press **▶ Почати**.
+2. The transcript fills in live as you go.
+3. **⏹ Зупинити** stops and saves it.
+4. **📋 Скопіювати транскрипт** copies everything shown to the clipboard.
 
-1. Install **Python 3.11+** (64-bit) - tick *"Add python.exe to PATH"* in the
-   installer, or run `winget install -e --id Python.Python.3.12`.
-2. Copy this folder anywhere and double-click **`Транскрипція.vbs`**.
+Each run is saved to its own folder:
 
-That's it. The window opens, checks its components, and if anything is missing
-it shows a **"Встановити / полагодити"** button that installs everything
-(~1.5 GB, a few minutes) and re-checks. An NVIDIA GPU is optional; without one
-it runs on CPU (slower). `setup.bat` still exists if you prefer to run it by
-hand.
+    Записи\Запис DD.MM.YYYY\Запис DD.MM.YYYY.txt
 
-## The window
+While recording:
 
-Double-click **`Транскрипція.vbs`** - a normal window, no console among your
-other terminals.
+- `Ctrl+Alt+M` drops a "⭐ ВАЖЛИВО" marker, `Ctrl+Alt+K` drops "❓ НЕ ЗРОЗУМІВ" —
+  handy for flagging spots to revisit later.
+- If the audio drops out (e.g. headset disconnects), you get a Windows
+  notification and a `⚠️` line in the transcript.
 
-**Start panel.** Pick the **language** (Українська / English - you switch it
-yourself when a lecture is in the other one), toggle silence alerts / marker
-hotkeys, then press **▶ Почати**. It always runs the best model
-(`large-v3`). Your choices are remembered for next time. *Додатково* hides the
-output-device picker and an auto-stop timer.
+## Tips
 
-For a one-off rare-words hint or a lighter model, launch from
-`gui.bat --prompt "..." --model medium` instead.
+- Got acronyms, names, or a specific topic? Launch instead with
+  `gui.bat --prompt "topic, names, acronyms..."` — it noticeably improves
+  accuracy on unusual words.
+- Nothing appearing? Run `start.bat --list-devices`, find the right
+  `[Loopback]` device, then use `gui.bat --device-index N`.
+- Everything runs locally — no audio ever leaves your machine.
 
-**While recording.** No menu bar - just the transcript and two buttons.
-
-- The transcript fills in live.
-- **📋 Скопіювати транскрипт** copies everything shown so far to the clipboard.
-- Status bar: device, elapsed, line count; turns red (and a red line appears
-  in the transcript) if the sound drops out.
-- **⏹ Зупинити** stops the recording, saves the file, and returns to the start
-  panel so you can begin another lecture.
-
-To launch straight past the panel with fixed options:
-**`gui.bat --language uk --prompt "..."`** (its console closes itself).
-
-## Console version / start-stop
-
-- Double-click **`start.bat`** (or run it from a terminal) for the plain
-  console tool - same engine, no window.
-- Older desktop shortcuts **"Транскрипція лекції (укр)"** / **"(англ)"** still
-  point at the console tool; repoint them to `Транскрипція.vbs` for the window.
-- Stop with **Ctrl+C** (or just close the window). The transcript is saved
-  continuously, so nothing is lost if it crashes.
-- Each run gets its own folder `Записи\Запис DD.MM.YYYY\` with the transcript
-  inside. Sit through a lecture, close the transcriber, and that folder is your
-  record of it.
-
-## Options
-
-The same flags work for the window: `gui.bat --language uk ...`
-
-    start.bat --language uk        force Ukrainian (or: en; default: auto-detect)
-    start.bat --prompt "тема: перетворення Фур'є, лектор Іваненко, GMRES, SVD"
-                                  hint rare words / names / acronyms -> better accuracy
-    start.bat --model medium      lighter model (use if the GPU is busy with a game)
-    start.bat --compute-type int8_float16   faster + less VRAM (default: float16)
-    start.bat --beam-size 3       faster, a little less accurate (default: 5)
-    start.bat --duration 90       stop automatically after 90 minutes
-    start.bat --max-segment 10    shorter -> lower latency, longer -> more context
-    start.bat --min-silence 0.4   pause length that ends a line
-    start.bat --list-devices      list capture devices
-    start.bat --device-index 19   capture a specific device
-    start.bat --mark-key ctrl+alt+space   rebind the "important" marker hotkey
-    start.bat --silence-alert 30  seconds of no audio before it warns you (0 = off)
-    start.bat --no-toast          silence warning in console/transcript only
-
-## Speed / quality balance (current defaults)
-
-Tuned for quality first, with the latency win kept:
-
-- model `large-v3`, compute `float16`, `beam-size 5` (~4.5 GB VRAM)
-- transcription runs in a separate thread, so recording never stalls while the GPU works
-- the previous line is fed back as context, so terminology stays consistent
-- a line is emitted after **0.6 s** of silence, or every **18 s** during
-  non-stop speech (cut at the quietest point so no word is lost)
-
-Result: for normal lecture speech (pauses between sentences) text appears
-**~1-2 s** after it is spoken. During an uninterrupted monologue you wait up to
-~18 s for that stretch - lower `--max-segment` if that bothers you.
-
-Faster, lower quality: `--compute-type int8_float16 --beam-size 1 --max-segment 10`.
-For acronyms / names, always pass `--prompt "..."` - it helps more than any setting.
-
-## Notes
-
-- First run downloads the model (~1.5 GB for `large-v3`) once; then it loads in
-  a few seconds.
-- A silent keep-alive tone is played to your output device so capture keeps
-  working during pauses. It is inaudible. Disable with `--no-keepalive`.
-- The marker hotkeys need `keyboard` (in `requirements.txt`). If it's missing
-  that feature just logs a line and switches itself off - the transcript still
-  works.
-- The silence notification is a plain Windows toast raised via PowerShell; no
-  extra package needed.
-- The window (`gui.py`) uses `tkinter`, which ships with Python - nothing to
-  install. `transcribe.py` is the shared engine; the window and the console are
-  just two front-ends for it.
-- Everything runs locally - no audio is sent anywhere.
-
-## If it picks the wrong audio device / no text appears
-
-If your headphones disconnect, Windows can switch the default output to another
-device and the tool then captures silence. You'll get a Windows notification and
-a `⚠️` line in the transcript (see `--silence-alert`). Fix: run
-`start.bat --list-devices`, find the `[Loopback]` entry for the output you
-actually listen through, and pass its number:
-`start.bat --language uk --device-index N`.
+For the full list of options, run `start.bat --help`.
