@@ -1,43 +1,44 @@
-# Live lecture transcriber
+# Транскрипція лекцій наживо
 
-Records whatever's coming out of your speakers (Zoom / Meet / browser) and
-transcribes it live with Whisper, so you can scroll back whenever you zone out.
+Записує все, що виходить з колонок (Zoom / Meet / браузер), і наживо
+транскрибує через Whisper — щоб можна було прогорнути назад, якщо відволікся.
 
-## First run
+## Перший запуск
 
-1. Install **Python 3.11+** (64-bit), ticking "Add python.exe to PATH".
-2. Double-click **`Транскрипція.vbs`**.
+1. Встанови **Python 3.11+** (64-біт), познач "Add python.exe to PATH".
+2. Двічі клацни **`Транскрипція.vbs`**.
 
-It checks its components and offers to install anything missing (~1.5 GB,
-one-time). An NVIDIA GPU is optional; without one it runs on CPU (slower).
+Він перевірить компоненти і сам запропонує встановити те, чого не вистачає
+(~1.5 ГБ, одноразово). Відеокарта NVIDIA не обов'язкова — без неї працює на
+процесорі (повільніше).
 
-## Using it
+## Як користуватись
 
-Double-click **`Транскрипція.vbs`** to open the window:
+Двічі клацни **`Транскрипція.vbs`**, щоб відкрити вікно:
 
-1. Pick the language (Українська / English) and press **▶ Почати**.
-2. The transcript fills in live as you go.
-3. **⏹ Зупинити** stops and saves it.
-4. **📋 Скопіювати транскрипт** copies everything shown to the clipboard.
+1. Обери мову (Українська / English) і натисни **▶ Почати**.
+2. Транскрипт заповнюється наживо.
+3. **⏹ Зупинити** зупиняє і зберігає запис.
+4. **📋 Скопіювати транскрипт** копіює все показане в буфер обміну.
 
-Each run is saved to its own folder:
+Кожен запуск зберігається в окрему папку:
 
     Записи\Запис DD.MM.YYYY\Запис DD.MM.YYYY.txt
 
-While recording:
+Під час запису:
 
-- `Ctrl+Alt+M` drops a "⭐ ВАЖЛИВО" marker, `Ctrl+Alt+K` drops "❓ НЕ ЗРОЗУМІВ" —
-  handy for flagging spots to revisit later.
-- If the audio drops out (e.g. headset disconnects), you get a Windows
-  notification and a `⚠️` line in the transcript.
+- `Ctrl+Alt+M` ставить мітку "⭐ ВАЖЛИВО", `Ctrl+Alt+K` — "❓ НЕ ЗРОЗУМІВ" —
+  зручно позначати місця, щоб повернутись до них пізніше.
+- Якщо звук пропав (наприклад, відключились навушники), прийде сповіщення
+  Windows і в транскрипті з'явиться рядок `⚠️`.
 
-## Tips
+## Поради
 
-- Got acronyms, names, or a specific topic? Launch instead with
-  `gui.bat --prompt "topic, names, acronyms..."` — it noticeably improves
-  accuracy on unusual words.
-- Nothing appearing? Run `start.bat --list-devices`, find the right
-  `[Loopback]` device, then use `gui.bat --device-index N`.
-- Everything runs locally — no audio ever leaves your machine.
+- Є абревіатури, імена чи конкретна тема? Запускай через
+  `gui.bat --prompt "тема, імена, абревіатури..."` — це помітно покращує
+  точність на незвичних словах.
+- Нічого не з'являється? Виконай `start.bat --list-devices`, знайди потрібний
+  пристрій `[Loopback]`, тоді `gui.bat --device-index N`.
+- Все працює локально — жоден звук нікуди не надсилається.
 
-For the full list of options, run `start.bat --help`.
+Повний список опцій: `start.bat --help`.
