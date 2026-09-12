@@ -1,0 +1,6 @@
+# Windows batch files are parsed by cmd.exe, which is fragile with LF-only line
+# endings (a REM comment containing non-ASCII text was enough to make gui.bat
+# misparse two lines into bogus commands). Force real CRLF on checkout no
+# matter what the cloning machine's core.autocrlf is set to.
+*.bat text eol=crlf
+*.vbs text eol=crlf

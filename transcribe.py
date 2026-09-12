@@ -476,7 +476,12 @@ class Session:
     def alive(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
-    def stop(self, join_timeout: float = 45.0) -> None:
+    def stop(self, join_timeout: float = 300.0) -> None:
+        """Signal the session to stop and wait for it to actually finish.
+        The default is generous because the one step that can't be interrupted
+        -- loading/downloading the Whisper model -- can legitimately take
+        minutes on a slow connection or a cold Smart App Control scan; callers
+        that already poll asynchronously (the GUI) are not blocked by this."""
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=join_timeout)
@@ -740,6 +745,15 @@ def main() -> None:
             time.sleep(0.3)
     except KeyboardInterrupt:
         log("stopping …")
+        # Poll instead of one long join() so a slow, uninterruptible step (the
+        # model still loading/downloading) gets an occasional reassurance
+        # instead of the console looking hung.
+        waited = 0.0
+        while sess.alive():
+            sess.stop(join_timeout=2.0)
+            waited += 2.0
+            if sess.alive() and waited % 10 == 0:
+                log("  still stopping … (model load/cleanup can take a while)")
         sess.stop()
 
 

@@ -31,5 +31,5 @@ if defined NEEDSETUP (
 
 "%VPY%" -u transcribe.py %*
 echo.
-echo ==== stopped. this run's folder (text + audio) is under "Zapysy\Zapys DD.MM.YYYY" ====
+echo ==== stopped. this run's transcript is under "Zapysy\Zapys DD.MM.YYYY" ====
 pause

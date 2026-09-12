@@ -528,10 +528,15 @@ class MainWindow:
         if not isinstance(v, TranscriptView):
             done_cb()
             return
-        try:
-            v.status.config(text="Зупиняю запис і зберігаю файли…")
-        except Exception:  # noqa: BLE001
-            pass
+        started = time.monotonic()
+
+        def set_status(text):
+            try:
+                v.status.config(text=text)
+            except Exception:  # noqa: BLE001
+                pass
+
+        set_status("Зупиняю запис і зберігаю файли…")
         done = threading.Event()
         threading.Thread(target=lambda: (v.stop_session(), done.set()),
                          daemon=True).start()
@@ -539,9 +544,15 @@ class MainWindow:
         def poll():
             if done.is_set():
                 done_cb()
-            else:
-                self.root.after(120, poll)
-        self.root.after(120, poll)
+                return
+            elapsed = time.monotonic() - started
+            if elapsed > 5:
+                # e.g. the model was still (down)loading when Stop was pressed --
+                # that step can't be interrupted, so say so instead of looking frozen.
+                set_status(f"Зупиняю запис… ({elapsed:.0f} с) — можливо, ще "
+                           "завершується завантаження моделі, зачекайте.")
+            self.root.after(300, poll)
+        self.root.after(300, poll)
 
 
 def main():
