@@ -52,21 +52,13 @@ output-device picker and an auto-stop timer.
 For a one-off rare-words hint or a lighter model, launch from
 `gui.bat --prompt "..." --model medium` instead.
 
-**While recording.**
+**While recording.** No menu bar - just the transcript and two buttons.
 
 - The transcript fills in live.
-- Click the **☆** in the left margin of a line to flag it **★ important** - the
-  line is highlighted and flagged lines are also written to a sidecar file
-  `Запис ....важливо.txt` next to the transcript.
-- Right-click a line: mark / unmark, or copy just that line. `Ctrl+M` flags the
-  last line.
-- Menu **Правка**: select all (Ctrl+A), copy selection, **copy the whole
-  transcript**, **copy only the important lines**.
-- Menu **Файл**: open the recording folder, save the transcript (or just the
-  important lines) elsewhere.
-- Status bar: device, elapsed, line and mark counts; turns red (and a red line
-  appears) if the sound drops out.
-- **⏹ Зупинити** stops the recording, saves the files, and returns to the start
+- **📋 Скопіювати транскрипт** copies everything shown so far to the clipboard.
+- Status bar: device, elapsed, line count; turns red (and a red line appears
+  in the transcript) if the sound drops out.
+- **⏹ Зупинити** stops the recording, saves the file, and returns to the start
   panel so you can begin another lecture.
 
 To launch straight past the panel with fixed options:

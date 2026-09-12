@@ -40,7 +40,7 @@ def _message_box(text: str, title: str = "Транскрипція лекції"
 
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox, scrolledtext
+    from tkinter import ttk, messagebox, scrolledtext
 except Exception:  # noqa: BLE001
     _message_box("Не вдалося завантажити tkinter.\n\nПоставте Python з python.org "
                  "з увімкненим компонентом 'tcl/tk and IDLE'.")
@@ -94,8 +94,6 @@ def check_components():
 
 
 LANGS = [("Українська", "uk"), ("English", "en")]
-
-STAR_ON, STAR_OFF = "★ ", "☆ "
 
 
 def load_settings():
@@ -358,8 +356,6 @@ class TranscriptView(ttk.Frame):
         self.args = args
         self.on_back = on_back
         self.q = queue.Queue()
-        self.rows = []
-        self.by_line = {}
         self.count = 0
         self.ended = False
         self.status_extra = "запуск…"
@@ -367,6 +363,8 @@ class TranscriptView(ttk.Frame):
         top = ttk.Frame(self, padding=(8, 6))
         top.pack(fill="x")
         ttk.Button(top, text="⏹  Зупинити", command=self._stop).pack(side="left")
+        ttk.Button(top, text="📋  Скопіювати транскрипт", command=self.copy_all
+                   ).pack(side="left", padx=(8, 0))
         self.autoscroll = tk.BooleanVar(value=True)
         ttk.Checkbutton(top, text="Стежити за низом", variable=self.autoscroll
                         ).pack(side="right")
@@ -378,45 +376,30 @@ class TranscriptView(ttk.Frame):
         body.pack(fill="both", expand=True)
         self.text = tk.Text(body, wrap="word", font=("Segoe UI", 11),
                             spacing1=3, spacing3=3, padx=8, pady=6,
-                            cursor="arrow", undo=False, state="disabled")
+                            undo=False, state="disabled")
         sb = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
         self.text.configure(yscrollcommand=sb.set)
         self.text.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-        self.text.tag_configure("star", foreground="#c99a00")
         self.text.tag_configure("ts", foreground="#8a8a8a")
-        self.text.tag_configure("imp", background="#fff4c2")
         self.text.tag_configure("alertrow", background="#ffe1e1")
         self.text.tag_configure("markrow", background="#e3f1ff")
-        self.text.bind("<Button-1>", self._on_click)
-        self.text.bind("<Button-3>", self._on_rclick)
-
-        bar = ttk.Frame(self, padding=(8, 6))
-        bar.pack(fill="x")
-        ttk.Button(bar, text="★  Позначити останній рядок  (Ctrl+M)",
-                   command=self._toggle_last).pack(side="left")
 
         self.session = T.Session(args, on_event=lambda k, ts, tx: self.q.put((k, ts, tx)))
         self.session.start()
         self.after(150, self._drain)
         self.after(1000, self._tick)
 
-    # ---- rendering (same behaviour as before) ---------------------
+    # ---- rendering ---------------------------------------------------
     def _at_bottom(self):
         return self.text.yview()[1] > 0.999
 
     def _add_row(self, ts, body):
         stick = self.autoscroll.get() and self._at_bottom()
         self.text.configure(state="normal")
-        lineno = int(self.text.index("end-1c").split(".")[0])
-        tag = f"L{len(self.rows)}"
-        self.text.insert("end", STAR_OFF, ("star", tag))
-        self.text.insert("end", f"{ts:%H:%M:%S}  ", ("ts", tag))
-        self.text.insert("end", body + "\n", (tag,))
+        self.text.insert("end", f"{ts:%H:%M:%S}  ", ("ts",))
+        self.text.insert("end", body + "\n")
         self.text.configure(state="disabled")
-        self.rows.append({"tag": tag, "ts": ts, "text": body,
-                          "marked": False, "lineno": lineno})
-        self.by_line[lineno] = len(self.rows) - 1
         if stick:
             self.text.see("end")
 
@@ -430,118 +413,10 @@ class TranscriptView(ttk.Frame):
         if stick:
             self.text.see("end")
 
-    def _toggle(self, i):
-        r = self.rows[i]
-        r["marked"] = not r["marked"]
-        ln = r["lineno"]
-        self.text.configure(state="normal")
-        self.text.delete(f"{ln}.0", f"{ln}.2")
-        self.text.insert(f"{ln}.0", STAR_ON if r["marked"] else STAR_OFF,
-                         ("star", r["tag"]))
-        if r["marked"]:
-            self.text.tag_add("imp", f"{ln}.0", f"{ln}.0 lineend")
-        else:
-            self.text.tag_remove("imp", f"{ln}.0", f"{ln}.0 lineend")
-        self.text.configure(state="disabled")
-        self._write_sidecar()
-        self._refresh()
-
-    def _toggle_last(self):
-        if self.rows:
-            self._toggle(len(self.rows) - 1)
-
-    def _row_at(self, event):
-        try:
-            ln = int(self.text.index(f"@{event.x},{event.y}").split(".")[0])
-        except tk.TclError:
-            return None
-        return self.by_line.get(ln)
-
-    def _on_click(self, event):
-        try:
-            col = int(self.text.index(f"@{event.x},{event.y}").split(".")[1])
-        except tk.TclError:
-            return
-        if col <= 1:
-            i = self._row_at(event)
-            if i is not None:
-                self._toggle(i)
-                return "break"
-
-    def _on_rclick(self, event):
-        i = self._row_at(event)
-        if i is None:
-            return
-        m = tk.Menu(self, tearoff=0)
-        m.add_command(label=("Зняти позначку" if self.rows[i]["marked"]
-                             else "Позначити як важливе"),
-                      command=lambda: self._toggle(i))
-        m.add_command(label="Скопіювати цей рядок",
-                      command=lambda: self._clip(
-                          f"[{self.rows[i]['ts']:%H:%M:%S}] {self.rows[i]['text']}"))
-        m.tk_popup(event.x_root, event.y_root)
-
-    # ---- clipboard / files ------------------------------------
-    def _clip(self, s):
-        self.winfo_toplevel().clipboard_clear()
-        self.winfo_toplevel().clipboard_append(s)
-
-    def select_all(self):
-        self.text.tag_remove("sel", "1.0", "end")
-        self.text.tag_add("sel", "1.0", "end-1c")
-        self.text.focus_set()
-        return "break"
-
-    def copy_selection(self):
-        try:
-            self._clip(self.text.get("sel.first", "sel.last"))
-        except tk.TclError:
-            pass
-
+    # ---- clipboard ---------------------------------------------------
     def copy_all(self):
-        self._clip(self.text.get("1.0", "end-1c"))
-
-    def important_lines(self):
-        return [f"[{r['ts']:%H:%M:%S}] {r['text']}" for r in self.rows if r["marked"]]
-
-    def copy_important(self):
-        self._clip("\n".join(self.important_lines()))
-
-    def _write_sidecar(self):
-        out = self.session.outfile
-        if not out:
-            return
-        path = os.path.splitext(out)[0] + ".важливо.txt"
-        lines = self.important_lines()
-        try:
-            if not lines:
-                if os.path.exists(path):
-                    os.remove(path)
-                return
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("Важливі рядки — " + os.path.basename(out) + "\n\n")
-                f.write("\n".join(lines) + "\n")
-        except OSError:
-            pass
-
-    def open_folder(self):
-        out = self.session.outfile
-        if out and os.path.isdir(os.path.dirname(out)):
-            os.startfile(os.path.dirname(out))  # noqa: S606
-
-    def save_as(self, important_only=False):
-        p = filedialog.asksaveasfilename(
-            defaultextension=".txt", filetypes=[("Текст", "*.txt")],
-            initialfile="важливе.txt" if important_only else "транскрипт.txt")
-        if not p:
-            return
-        data = ("\n".join(self.important_lines()) + "\n" if important_only
-                else self.text.get("1.0", "end-1c"))
-        try:
-            with open(p, "w", encoding="utf-8") as f:
-                f.write(data)
-        except OSError as exc:
-            messagebox.showerror("Транскрипція лекції", f"Не вдалося зберегти: {exc}")
+        self.winfo_toplevel().clipboard_clear()
+        self.winfo_toplevel().clipboard_append(self.text.get("1.0", "end-1c"))
 
     # ---- status / queue ------------------------------------
     def _drain(self):
@@ -588,12 +463,11 @@ class TranscriptView(ttk.Frame):
         if started:
             s = int(time.monotonic() - started)
             el = f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
-        marked = sum(1 for r in self.rows if r["marked"])
         head = "🔴 НЕМАЄ ЗВУКУ" if self.session.silent else "🟢 запис"
         if self.ended:
             head = "⏹ завершено"
         self.status.config(text="   ·   ".join(
-            [head, dev, el, f"{self.count} рядків", f"{marked} важл.", self.status_extra]))
+            [head, dev, el, f"{self.count} рядків", self.status_extra]))
 
     # ---- stop ---------------------------------------------
     def _stop(self):
@@ -621,57 +495,10 @@ class MainWindow:
                 style.theme_use("vista")
         except Exception:  # noqa: BLE001
             pass
-        self._build_menu()
         if direct_args is not None:
             self._start_session(direct_args)
         else:
             self._show_panel()
-
-    def _build_menu(self):
-        m = tk.Menu(self.root)
-        f = tk.Menu(m, tearoff=0)
-        f.add_command(label="Відкрити папку запису", command=self._m(lambda v: v.open_folder()))
-        f.add_separator()
-        f.add_command(label="Зберегти транскрипт як…",
-                      command=self._m(lambda v: v.save_as(False)))
-        f.add_command(label="Зберегти важливі рядки як…",
-                      command=self._m(lambda v: v.save_as(True)))
-        f.add_separator()
-        f.add_command(label="Вийти", command=self._on_close)
-        m.add_cascade(label="Файл", menu=f)
-
-        e = tk.Menu(m, tearoff=0)
-        e.add_command(label="Виділити весь текст", command=self._m(lambda v: v.select_all()))
-        e.add_command(label="Копіювати виділене", command=self._m(lambda v: v.copy_selection()))
-        e.add_separator()
-        e.add_command(label="Скопіювати весь транскрипт", command=self._m(lambda v: v.copy_all()))
-        e.add_command(label="Скопіювати лише важливі рядки",
-                      command=self._m(lambda v: v.copy_important()))
-        m.add_cascade(label="Правка", menu=e)
-
-        h = tk.Menu(m, tearoff=0)
-        h.add_command(label="Як користуватися", command=self._help)
-        m.add_cascade(label="Довідка", menu=h)
-        self.root.config(menu=m)
-
-    def _m(self, fn):
-        def run():
-            if isinstance(self.view, TranscriptView):
-                fn(self.view)
-        return run
-
-    def _help(self):
-        messagebox.showinfo(
-            "Як користуватися",
-            "1. На панелі оберіть мову лекції й натисніть «Почати».\n"
-            "2. Текст лекції зʼявляється сам, поки грає звук.\n"
-            "3. Клац по зірці ☆ ліворуч від рядка — позначити важливим (★).\n"
-            "   Права кнопка — меню + копіювати рядок. Ctrl+M — останній рядок.\n"
-            "4. Правка → Скопіювати весь транскрипт / лише важливі рядки.\n"
-            "   Важливі рядки також йдуть у файл «…важливо.txt» поряд із записом.\n"
-            "5. Ctrl+Alt+M / Ctrl+Alt+K — глобальні мітки навіть коли вікно згорнуте.\n"
-            "6. Червоний рядок = пропав звук (перевір пристрій виводу Windows).\n"
-            "7. «Зупинити» повертає на панель — можна почати нову лекцію.")
 
     # ---- view switching --------------------------------------
     def _show_panel(self):
@@ -680,7 +507,6 @@ class MainWindow:
         self.root.geometry("720x640")
         self.view = StartPanel(self.root, on_start=self._start_session)
         self.view.pack(fill="both", expand=True)
-        self.root.bind("<Control-m>", lambda e: None)
 
     def _start_session(self, args):
         if self.view is not None:
@@ -688,10 +514,6 @@ class MainWindow:
         self.root.geometry("960x700")
         self.view = TranscriptView(self.root, args, on_back=self._back_to_panel)
         self.view.pack(fill="both", expand=True)
-        self.root.bind("<Control-a>", lambda e: self.view.select_all())
-        self.root.bind("<Control-A>", lambda e: self.view.select_all())
-        self.root.bind("<Control-m>", lambda e: self.view._toggle_last())
-        self.root.bind("<Control-M>", lambda e: self.view._toggle_last())
 
     def _back_to_panel(self):
         self._teardown_then(self._show_panel)
