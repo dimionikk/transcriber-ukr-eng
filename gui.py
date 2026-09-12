@@ -94,6 +94,19 @@ def check_components():
 
 
 LANGS = [("Українська", "uk"), ("English", "en")]
+MODELS = ["large-v3", "medium", "small"]
+COMPUTE_TYPES = [
+    ("Найкраща якість (float16)", "float16"),
+    ("Швидше, менше пам'яті (int8_float16)", "int8_float16"),
+]
+_COMPUTE_BY_LABEL = {lbl: val for lbl, val in COMPUTE_TYPES}
+
+
+def _compute_label(value):
+    for lbl, val in COMPUTE_TYPES:
+        if val == value:
+            return lbl
+    return COMPUTE_TYPES[0][0]
 
 
 def load_settings():
@@ -161,23 +174,81 @@ class StartPanel(ttk.Frame):
         ttk.Checkbutton(cf, text="Гарячі клавіші-мітки", variable=self.hotkeys
                         ).pack(side="left")
 
-        # advanced (collapsible)
+        # advanced (collapsible) -- every knob that used to require editing a
+        # .bat file or passing CLI flags lives here now.
         self.adv_open = tk.BooleanVar(value=False)
         self.adv_btn = ttk.Checkbutton(opt, text="Додатково", style="Toolbutton",
                                        variable=self.adv_open, command=self._toggle_adv)
         self.adv_btn.grid(row=3, column=0, sticky="w", pady=(10, 0))
         self.adv = ttk.Frame(opt)
-        ttk.Label(self.adv, text="Пристрій виводу").grid(row=0, column=0, sticky="w")
+
+        def _section(row, text):
+            ttk.Label(self.adv, text=text, font=("Segoe UI", 9, "bold")).grid(
+                row=row, column=0, columnspan=2, sticky="w", pady=(8, 2))
+
+        ttk.Label(self.adv, text="Пристрій виводу").grid(row=1, column=0, sticky="w")
         self.device = tk.StringVar(value="За замовчуванням")
         self._devs = [("", "За замовчуванням")]
-        self.dev_combo = ttk.Combobox(self.adv, textvariable=self.device, width=48,
+        self.dev_combo = ttk.Combobox(self.adv, textvariable=self.device, width=44,
                                       state="readonly", values=["За замовчуванням"])
-        self.dev_combo.grid(row=0, column=1, sticky="w", padx=6, pady=2)
+        self.dev_combo.grid(row=1, column=1, sticky="w", padx=6, pady=2)
         ttk.Label(self.adv, text="Автостоп через, хв (0 = вимк.)").grid(
-            row=1, column=0, sticky="w")
+            row=2, column=0, sticky="w")
         self.duration = tk.StringVar(value=str(s.get("duration", 0) or 0))
-        ttk.Entry(self.adv, textvariable=self.duration, width=8).grid(
-            row=1, column=1, sticky="w", padx=6, pady=2)
+        ttk.Entry(self.adv, textvariable=self.duration, width=10).grid(
+            row=2, column=1, sticky="w", padx=6, pady=2)
+
+        _section(3, "Розпізнавання")
+        ttk.Label(self.adv, text="Підказка (тема, імена, терміни)").grid(
+            row=4, column=0, sticky="w")
+        self.prompt = tk.StringVar(value=s.get("prompt", ""))
+        ttk.Entry(self.adv, textvariable=self.prompt, width=40).grid(
+            row=4, column=1, sticky="we", padx=6, pady=2)
+        ttk.Label(self.adv, text="Модель").grid(row=5, column=0, sticky="w")
+        self.model = tk.StringVar(value=s.get("model") or "large-v3")
+        ttk.Combobox(self.adv, textvariable=self.model, width=16, state="readonly",
+                     values=MODELS).grid(row=5, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(self.adv, text="Швидкість / якість").grid(row=6, column=0, sticky="w")
+        self.compute_label = tk.StringVar(
+            value=_compute_label(s.get("compute_type", "float16")))
+        ttk.Combobox(self.adv, textvariable=self.compute_label, width=34, state="readonly",
+                     values=[lbl for lbl, _ in COMPUTE_TYPES]).grid(
+            row=6, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(self.adv, text="Ширина променевого пошуку (beam)").grid(
+            row=7, column=0, sticky="w")
+        self.beam_size = tk.StringVar(value=str(s.get("beam_size", 5)))
+        ttk.Spinbox(self.adv, from_=1, to=5, textvariable=self.beam_size, width=6
+                    ).grid(row=7, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(self.adv, text="Пауза, що завершує рядок, с").grid(
+            row=8, column=0, sticky="w")
+        self.min_silence = tk.StringVar(value=str(s.get("min_silence", 0.6)))
+        ttk.Entry(self.adv, textvariable=self.min_silence, width=10).grid(
+            row=8, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(self.adv, text="Макс. довжина сегмента, с").grid(
+            row=9, column=0, sticky="w")
+        self.max_segment = tk.StringVar(value=str(s.get("max_segment", 18)))
+        ttk.Entry(self.adv, textvariable=self.max_segment, width=10).grid(
+            row=9, column=1, sticky="w", padx=6, pady=2)
+
+        _section(10, "Гарячі клавіші")
+        ttk.Label(self.adv, text='Мітка "важливо"').grid(row=11, column=0, sticky="w")
+        self.mark_key = tk.StringVar(value=s.get("mark_key") or "ctrl+alt+m")
+        ttk.Entry(self.adv, textvariable=self.mark_key, width=16).grid(
+            row=11, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(self.adv, text='Мітка "не зрозумів"').grid(row=12, column=0, sticky="w")
+        self.confused_key = tk.StringVar(value=s.get("confused_key") or "ctrl+alt+k")
+        ttk.Entry(self.adv, textvariable=self.confused_key, width=16).grid(
+            row=12, column=1, sticky="w", padx=6, pady=2)
+
+        _section(13, "Сповіщення про тишу")
+        ttk.Label(self.adv, text="Попереджати через, с").grid(row=14, column=0, sticky="w")
+        self.silence_secs = tk.StringVar(value=str(s.get("silence_secs", 20)))
+        ttk.Entry(self.adv, textvariable=self.silence_secs, width=10).grid(
+            row=14, column=1, sticky="w", padx=6, pady=2)
+        self.no_keepalive = tk.BooleanVar(value=s.get("no_keepalive", False))
+        ttk.Checkbutton(self.adv, text="Без тихого сигналу підтримки з'єднання",
+                        variable=self.no_keepalive).grid(
+            row=15, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         # --- go --------------------------------------------------
         self.go = ttk.Button(self, text="▶   Почати запис", command=self._go)
@@ -290,10 +361,13 @@ class StartPanel(ttk.Frame):
 
     # ---- advanced toggle -------------------------------------
     def _toggle_adv(self):
+        top = self.winfo_toplevel()
         if self.adv_open.get():
             self.adv.grid(row=4, column=0, sticky="we", pady=(4, 0))
+            top.geometry("760x920")
         else:
             self.adv.grid_forget()
+            top.geometry("720x640")
 
     # ---- queue pump -----------------------------------------
     def _drain(self):
@@ -322,27 +396,53 @@ class StartPanel(ttk.Frame):
         if T is None:
             messagebox.showerror("Транскрипція лекції", "Двигун ще не готовий.")
             return
-        args = T.default_args()          # model large-v3 / float16 / beam 5
+
+        def _float(var, default):
+            try:
+                return max(0.0, float(var.get().replace(",", ".")))
+            except ValueError:
+                return default
+
+        args = T.default_args()
         args.language = self.lang.get() or "uk"
-        args.silence_alert = 20.0 if self.silence.get() else 0.0
-        args.no_toast = not self.silence.get()
-        if not self.hotkeys.get():
+        args.prompt = self.prompt.get().strip() or None
+        args.model = self.model.get() or "large-v3"
+        args.compute_type = _COMPUTE_BY_LABEL.get(self.compute_label.get(), "float16")
+        try:
+            args.beam_size = max(1, int(self.beam_size.get()))
+        except ValueError:
+            args.beam_size = 5
+        args.min_silence = _float(self.min_silence, 0.6)
+        args.max_segment = _float(self.max_segment, 18.0) or 18.0
+        args.no_keepalive = self.no_keepalive.get()
+
+        if self.hotkeys.get():
+            args.mark_key = self.mark_key.get().strip()
+            args.confused_key = self.confused_key.get().strip()
+        else:
             args.mark_key = ""
             args.confused_key = ""
+
+        silence_secs = _float(self.silence_secs, 20.0)
+        args.silence_alert = silence_secs if self.silence.get() else 0.0
+        args.no_toast = not self.silence.get()
+
         # advanced
         idx = None
         for val, lbl in self._devs:
             if lbl == self.device.get() and val:
                 idx = int(val)
         args.device_index = idx
-        try:
-            args.duration = max(0.0, float(self.duration.get().replace(",", ".")))
-        except ValueError:
-            args.duration = 0.0
+        args.duration = _float(self.duration, 0.0)
 
         save_settings({
             "language": self.lang.get(), "silence": self.silence.get(),
             "hotkeys": self.hotkeys.get(), "duration": args.duration,
+            "prompt": self.prompt.get(), "model": args.model,
+            "compute_type": args.compute_type, "beam_size": args.beam_size,
+            "min_silence": args.min_silence, "max_segment": args.max_segment,
+            "mark_key": self.mark_key.get(), "confused_key": self.confused_key.get(),
+            "silence_secs": silence_secs, "no_keepalive": args.no_keepalive,
         })
         self.on_start(args)
 
