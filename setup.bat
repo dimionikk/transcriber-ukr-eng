@@ -2,7 +2,6 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-rem  --auto  = called from start.bat: no model-prefetch question, no final pause
 set "AUTO="
 if /i "%~1"=="--auto" set "AUTO=1"
 
@@ -12,7 +11,6 @@ echo    Lecture transcriber  -  installing dependencies
 echo ============================================================
 echo.
 
-rem ---- 1. find a Python interpreter ---------------------------
 set "PY="
 for %%C in ("py -3" "python" "python3") do (
     if not defined PY (
@@ -31,7 +29,6 @@ if not defined PY (
 )
 for /f "delims=" %%v in ('%PY% --version 2^>^&1') do echo [i] Using %%v   ^(%PY%^)
 
-rem ---- 2. must be 64-bit ------------------------------------
 for /f %%b in ('%PY% -c "import sys;print(64 if sys.maxsize>2**32 else 32)" 2^>nul') do set "BITS=%%b"
 if not "%BITS%"=="64" (
     echo [X] This Python is 32-bit. faster-whisper / CTranslate2 need 64-bit Python.
@@ -40,7 +37,6 @@ if not "%BITS%"=="64" (
     exit /b 1
 )
 
-rem ---- 3. virtual environment -----------------------------
 if exist ".venv\Scripts\python.exe" (
     echo [i] .venv already exists - reusing it.
 ) else (
@@ -54,7 +50,6 @@ if exist ".venv\Scripts\python.exe" (
 )
 set "VPY=.venv\Scripts\python.exe"
 
-rem ---- 4. install packages -------------------------------
 echo [i] Updating pip ...
 "%VPY%" -m pip install --upgrade pip --disable-pip-version-check
 echo.
@@ -70,7 +65,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-rem ---- 5. verify ------------------------------------------
 echo.
 echo [i] Verifying ...
 "%VPY%" -c "import faster_whisper, pyaudiowpatch, scipy, numpy, keyboard; print('    all core packages import OK')"

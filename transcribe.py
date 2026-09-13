@@ -1,35 +1,3 @@
-"""
-Live lecture transcriber.
-
-Captures whatever is playing on your speakers (Zoom / Meet / browser / anything),
-transcribes it in near real time with faster-whisper on the GPU, and appends
-timestamped lines to a text file you can keep open and scroll back through.
-
-Each run gets its own folder, 'Записи/Запис DD.MM.YYYY/', holding that session's
-transcript -- nothing loose to hunt for.
-
-While it runs it also:
-  * listens for global hotkeys that drop a marker line into the transcript at the
-    current time -- Ctrl+Alt+M = "important", Ctrl+Alt+K = "did not get this"
-    (change with --mark-key / --confused-key, empty string disables);
-  * pops a Windows notification if the capture goes silent mid-lecture, e.g. the
-    headset disconnected and Windows switched the default output (--no-toast off).
-
-This file is both the command-line tool and the engine behind gui.py -- the
-capture/transcribe pipeline lives in the `Session` class; `main()` is just a
-console front-end for it.
-
-Usage:
-    python transcribe.py                  # transcribe the default speakers until Ctrl+C
-    python transcribe.py --list-devices   # show capture devices and exit
-    python transcribe.py --language uk    # force Ukrainian (default: auto-detect)
-    python transcribe.py --model medium   # smaller / faster model
-    python transcribe.py --duration 90    # stop automatically after 90 minutes
-    python transcribe.py --prompt "..."   # hint rare terms (topic, names, jargon)
-
-Stop anytime with Ctrl+C. The transcript is flushed to disk continuously.
-"""
-
 import argparse
 import datetime as dt
 import glob
@@ -41,9 +9,6 @@ import sys
 import threading
 import time
 
-# Transcript text and file names are often Cyrillic; make sure a non-UTF-8
-# console (or a redirected pipe, or pythonw with no console at all) can't crash
-# us on an un-encodable character or a missing stream.
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -52,7 +17,6 @@ for _stream in (sys.stdout, sys.stderr):
 
 
 def _register_cuda_dlls() -> None:
-    """Make the pip-installed NVIDIA cuBLAS / cuDNN DLLs findable by CTranslate2."""
     roots = list(site.getsitepackages())
     if hasattr(site, "getusersitepackages"):
         roots.append(site.getusersitepackages())
@@ -71,20 +35,49 @@ import numpy as np
 import pyaudiowpatch as pyaudio
 from scipy.signal import resample_poly
 
-TARGET_RATE = 16000          # what Whisper expects
-FRAME_MS = 30                # granularity for the silence detector
-SILENCE_RMS = 260            # int16 RMS below this counts as "silence"
-SMARTCUT_WINDOW = 1.2        # seconds to search for a quiet spot when force-cutting
+TARGET_RATE = 16000
+FRAME_MS = 30
+SILENCE_RMS = 260
+SMARTCUT_WINDOW = 1.2
 
-RECORDS_DIRNAME = "Записи"
+RECORDS_DIRNAME = "Records"
+
+UI_TEXT = {
+    "uk": {
+        "toast_title": "Транскрипція лекції",
+        "mark_important": "⭐  ВАЖЛИВО  ⭐",
+        "mark_confused": "❓  НЕ ЗРОЗУМІВ  ❓",
+        "resumed_line": "✅ (звук відновлено)",
+        "resumed_event": "✅ звук відновлено",
+        "resumed_toast": "✅ Звук відновлено",
+        "lost_line": "⚠️ (звук зник — перевір пристрій виводу Windows)",
+        "lost_event": "⚠️ звук зник — перевір пристрій виводу Windows",
+        "lost_toast": "⚠️ Не чую звук — перевір пристрій виводу",
+        "error_prefix": "ПОМИЛКА",
+    },
+    "en": {
+        "toast_title": "Lecture Transcriber",
+        "mark_important": "⭐  IMPORTANT  ⭐",
+        "mark_confused": "❓  DID NOT UNDERSTAND  ❓",
+        "resumed_line": "✅ (sound resumed)",
+        "resumed_event": "✅ sound resumed",
+        "resumed_toast": "✅ Sound resumed",
+        "lost_line": "⚠️ (sound lost — check the Windows output device)",
+        "lost_event": "⚠️ sound lost — check the Windows output device",
+        "lost_toast": "⚠️ No sound detected — check the output device",
+        "error_prefix": "ERROR",
+    },
+}
+
+
+def ui_text(ui_language: str) -> dict:
+    return UI_TEXT.get(ui_language, UI_TEXT["uk"])
 
 
 def log(msg: str) -> None:
-    """Diagnostic line to stderr. Never raises -- under pythonw there is no
-    stderr, and we must not take the pipeline down over a log call."""
     try:
         print(f"{dt.datetime.now():%H:%M:%S}  {msg}", file=sys.stderr, flush=True)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
@@ -93,9 +86,7 @@ def script_dir() -> str:
 
 
 def new_session_dir(folder: str) -> str:
-    """Create and return a fresh per-session folder inside 'Записи':
-    'Запис DD.MM.YYYY' (then ' (2)', ' (3)', ... for more runs the same day)."""
-    base = os.path.join(folder, RECORDS_DIRNAME, f"Запис {dt.date.today():%d.%m.%Y}")
+    base = os.path.join(folder, RECORDS_DIRNAME, f"Session {dt.date.today():%d.%m.%Y}")
     n = 1
     while True:
         path = base if n == 1 else f"{base} ({n})"
@@ -107,8 +98,6 @@ def new_session_dir(folder: str) -> str:
 
 
 def notify(title: str, message: str) -> None:
-    """Best-effort Windows toast notification. Runs in a throwaway thread and
-    never raises -- if it can't show a toast it just beeps."""
     if sys.platform != "win32":
         return
 
@@ -134,20 +123,17 @@ def notify(title: str, message: str) -> None:
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 capture_output=True, timeout=15,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             try:
                 import ctypes
                 ctypes.windll.user32.MessageBeep(0x30)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
     threading.Thread(target=_run, daemon=True).start()
 
 
 class Sink:
-    """The transcript file, guarded by a lock so the transcription worker and the
-    hotkey / silence-alert callbacks can all append without interleaving."""
-
     def __init__(self, fout):
         self.fout = fout
         self._lock = threading.Lock()
@@ -161,14 +147,12 @@ class Sink:
         self.write_raw(line + "\n")
 
     def stamp(self, text: str) -> str:
-        """Append a timestamped line; return it."""
         line = f"[{dt.datetime.now():%H:%M:%S}] {text}"
         self.write_line(line)
         return line
 
 
 def pick_loopback(pa: pyaudio.PyAudio, device_index):
-    """Return (loopback_device_info, render_device_info) to record from / keep alive."""
     wasapi = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
     render = pa.get_device_info_by_index(wasapi["defaultOutputDevice"])
 
@@ -194,9 +178,6 @@ def list_devices(pa: pyaudio.PyAudio) -> None:
 
 
 class KeepAlive(threading.Thread):
-    """Plays inaudible silence to the render endpoint so WASAPI loopback keeps
-    delivering frames even when nothing else is playing."""
-
     def __init__(self, pa, render_dev):
         super().__init__(daemon=True)
         self.pa = pa
@@ -213,7 +194,7 @@ class KeepAlive(threading.Thread):
                 format=pyaudio.paInt16, channels=ch, rate=rate, output=True,
                 output_device_index=self.dev["index"], frames_per_buffer=chunk,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log(f"keep-alive unavailable ({exc}); silence detection may lag during pauses")
             return
         try:
@@ -228,9 +209,6 @@ class KeepAlive(threading.Thread):
 
 
 class Recorder(threading.Thread):
-    """Reads raw audio from the loopback device into a queue (daemon thread, so a
-    silent / stuck device can never block shutdown)."""
-
     def __init__(self, pa, dev, out_q):
         super().__init__(daemon=True)
         self.pa = pa
@@ -280,7 +258,6 @@ class Recorder(threading.Thread):
 
 
 def to_mono_16k(buf: np.ndarray, src_rate: int, channels: int) -> np.ndarray:
-    """int16 interleaved -> float32 mono @ 16 kHz, range [-1, 1]."""
     if channels > 1:
         buf = buf.reshape(-1, channels).mean(axis=1)
     buf = buf.astype(np.float32) / 32768.0
@@ -290,7 +267,6 @@ def to_mono_16k(buf: np.ndarray, src_rate: int, channels: int) -> np.ndarray:
 
 
 def load_model(preferred: str, compute_type: str):
-    """Try the preferred setup, fall back to smaller / CPU configs."""
     from faster_whisper import WhisperModel
 
     plan = [
@@ -309,16 +285,12 @@ def load_model(preferred: str, compute_type: str):
             model = WhisperModel(name, device=device, compute_type=compute)
             log(f"model ready: {name} / {device} / {compute}")
             return model
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log(f"  failed: {exc}")
     raise RuntimeError("Could not load any Whisper model.")
 
 
 class Transcriber(threading.Thread):
-    """Pulls (spoken_at, int16 samples) segments off a queue, transcribes them on
-    the GPU, and appends timestamped lines. Runs independently so recording and
-    segmentation never stall while the model is busy."""
-
     def __init__(self, model, args, src_rate, channels, sink: Sink, on_line=None):
         super().__init__(daemon=True)
         self.model = model
@@ -329,7 +301,7 @@ class Transcriber(threading.Thread):
         self.on_line = on_line
         self.in_q: "queue.Queue" = queue.Queue()
         self.min_samples = int(1.0 * src_rate) * channels
-        self.recent_text = ""  # rolling context fed back as a prompt
+        self.recent_text = ""
 
     def submit(self, spoken_at: dt.datetime, samples: np.ndarray) -> None:
         if samples.size >= self.min_samples:
@@ -343,13 +315,13 @@ class Transcriber(threading.Thread):
             spoken_at, samples = item
             try:
                 self._process(spoken_at, samples)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log(f"transcription error: {exc}")
 
     def _process(self, spoken_at: dt.datetime, samples: np.ndarray) -> None:
         audio = to_mono_16k(samples, self.src_rate, self.channels)
         if float(np.sqrt(np.mean(audio ** 2))) < 0.004:
-            return  # essentially silence -> skip (avoids model hallucinations)
+            return
 
         hint = " ".join(p for p in (self.args.prompt, self.recent_text) if p).strip()
         segments, _ = self.model.transcribe(
@@ -373,16 +345,12 @@ class Transcriber(threading.Thread):
         if self.on_line:
             try:
                 self.on_line(spoken_at, text)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log(f"on_line callback failed: {exc}")
 
 
 class Marker:
-    """Global hotkeys that drop a marker line into the transcript at the moment
-    you press them, so you can find the spots you flagged while reviewing."""
-
     def __init__(self, sink: Sink, specs, on_mark=None):
-        # specs: list of (hotkey_string, label_written_to_transcript)
         self.sink = sink
         self.on_mark = on_mark
         self.specs = [(hk, lab) for hk, lab in specs if hk]
@@ -393,7 +361,7 @@ class Marker:
             return
         try:
             import keyboard
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log(f"hotkey markers disabled ({exc}); 'pip install keyboard' to enable")
             return
         bound = []
@@ -401,7 +369,7 @@ class Marker:
             try:
                 keyboard.add_hotkey(hk, self._drop, args=(label,))
                 bound.append((hk, label))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log(f"could not bind hotkey '{hk}': {exc}")
         if bound:
             self._active = True
@@ -412,7 +380,7 @@ class Marker:
             self.sink.stamp(label)
             if self.on_mark:
                 self.on_mark(dt.datetime.now(), label)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log(f"marker write failed: {exc}")
 
     def stop(self) -> None:
@@ -421,13 +389,11 @@ class Marker:
         try:
             import keyboard
             keyboard.unhook_all()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
 
 def quiet_cut_point(pending: np.ndarray, src_rate: int, channels: int) -> int:
-    """Index in `pending` near the end where the audio is quietest, so a forced
-    cut lands in a gap between words rather than mid-syllable."""
     frame = max(1, int(src_rate * FRAME_MS / 1000)) * channels
     window = int(SMARTCUT_WINDOW * src_rate) * channels
     tail = pending[-window:]
@@ -441,32 +407,18 @@ def quiet_cut_point(pending: np.ndarray, src_rate: int, channels: int) -> int:
 
 
 class Session:
-    """The whole capture -> transcribe -> write pipeline, running on its own
-    thread. Feed events out through `on_event(kind, ts, text)`:
-        kind = "info"    ts=None   text=status/diagnostic string
-        kind = "line"    ts=dt     text=one transcribed sentence
-        kind = "mark"    ts=dt     text=hotkey marker label
-        kind = "alert"   ts=dt     text=capture went silent
-        kind = "resume"  ts=dt     text=capture recovered
-        kind = "ended"   ts=None   text=transcript file path
-    Both transcribe.py (console) and gui.py drive it the same way:
-        s = Session(args, on_event); s.start(); ...; s.stop()
-    """
-
     def __init__(self, args, on_event=None):
         self.args = args
         self._on_event = on_event or (lambda *a: None)
         self._stop = threading.Event()
         self._thread = None
         self._sink = None
-        # populated as the session comes up:
         self.outfile = None
         self.device_name = None
         self.started_at = None
         self.silent = False
         self.error = None
 
-    # ----- control -----------------------------------------------------
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -477,30 +429,24 @@ class Session:
         return bool(self._thread and self._thread.is_alive())
 
     def stop(self, join_timeout: float = 300.0) -> None:
-        """Signal the session to stop and wait for it to actually finish.
-        The default is generous because the one step that can't be interrupted
-        -- loading/downloading the Whisper model -- can legitimately take
-        minutes on a slow connection or a cold Smart App Control scan; callers
-        that already poll asynchronously (the GUI) are not blocked by this."""
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=join_timeout)
 
     def mark_now(self, label: str) -> None:
-        """Write a marker line right now (used by an in-window button too)."""
         if self._sink:
             self._sink.stamp(label)
             self._emit("mark", dt.datetime.now(), label)
 
-    # ----- internals -------------------------------------------------
     def _emit(self, kind: str, ts=None, text: str = "") -> None:
         try:
             self._on_event(kind, ts, text)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log(f"on_event failed: {exc}")
 
     def _run(self) -> None:
         args = self.args
+        ui = ui_text(getattr(args, "ui_language", "uk"))
         pa = pyaudio.PyAudio()
         keepalive = rec = worker = marker = fout = sink = None
         pending = np.empty(0, dtype=np.int16)
@@ -541,8 +487,8 @@ class Session:
                                  on_line=lambda ts, txt: self._emit("line", ts, txt))
             worker.start()
 
-            marker = Marker(sink, [(args.mark_key, "⭐  ВАЖЛИВО  ⭐"),
-                                   (args.confused_key, "❓  НЕ ЗРОЗУМІВ  ❓")],
+            marker = Marker(sink, [(args.mark_key, ui["mark_important"]),
+                                   (args.confused_key, ui["mark_confused"])],
                             on_mark=lambda ts, txt: self._emit("mark", ts, txt))
             marker.start()
 
@@ -560,9 +506,6 @@ class Session:
             startup_grace = max(8.0, args.silence_alert)
 
             while not self._stop.is_set():
-                # --- silence watchdog: with keep-alive on, frames never stop
-                #     during a real pause, so a byte count that stops moving
-                #     means the capture broke (device changed / unplugged).
                 now_m = time.monotonic()
                 if rec.bytes_seen != last_rx_bytes:
                     last_rx_bytes = rec.bytes_seen
@@ -570,23 +513,21 @@ class Session:
                     if silent_alerted:
                         silent_alerted = False
                         self.silent = False
-                        sink.stamp("✅ (звук відновлено)")
-                        self._emit("resume", dt.datetime.now(), "✅ звук відновлено")
+                        sink.stamp(ui["resumed_line"])
+                        self._emit("resume", dt.datetime.now(), ui["resumed_event"])
                         if not args.no_toast:
-                            notify("Транскрипція лекції", "✅ Звук відновлено")
+                            notify(ui["toast_title"], ui["resumed_toast"])
                 elif (args.silence_alert and not silent_alerted
                       and now_m - last_rx_time > args.silence_alert
                       and now_m - self.started_at > startup_grace):
                     silent_alerted = True
                     self.silent = True
                     gap = now_m - last_rx_time
-                    sink.stamp("⚠️ (звук зник — перевір пристрій виводу Windows)")
-                    self._emit("alert", dt.datetime.now(),
-                               "⚠️ звук зник — перевір пристрій виводу Windows")
+                    sink.stamp(ui["lost_line"])
+                    self._emit("alert", dt.datetime.now(), ui["lost_event"])
                     log(f"WARNING: no audio for {gap:.0f}s from '{dev['name']}'.")
                     if not args.no_toast:
-                        notify("Транскрипція лекції",
-                               "⚠️ Не чую звук — перевір пристрій виводу")
+                        notify(ui["toast_title"], ui["lost_toast"])
 
                 try:
                     data = raw_q.get(timeout=1.0)
@@ -619,9 +560,9 @@ class Session:
 
                 if deadline and time.monotonic() >= deadline:
                     break
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self.error = str(exc)
-            self._emit("info", None, f"ПОМИЛКА: {exc}")
+            self._emit("info", None, f"{ui['error_prefix']}: {exc}")
             log(f"session error: {exc}")
         finally:
             try:
@@ -635,14 +576,14 @@ class Session:
                 if worker:
                     try:
                         worker.submit(dt.datetime.now(), pending)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
                     worker.in_q.put(None)
                     worker.join(timeout=30)
                 if sink:
                     sink.write_raw(
                         f"===== session ended {dt.datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log(f"teardown: {exc}")
             finally:
                 if fout and not fout.closed:
@@ -652,13 +593,10 @@ class Session:
 
 
 def default_args():
-    """A fresh argparse.Namespace with every option at its default -- the
-    starting point the window tweaks before handing it to a Session."""
     return build_parser().parse_args([])
 
 
 def loopback_devices():
-    """[(index, label), ...] of loopback capture devices, for a picker. Best-effort."""
     out = []
     try:
         pa = pyaudio.PyAudio()
@@ -668,14 +606,13 @@ def loopback_devices():
                             f'{lb["name"]}  ({int(lb["defaultSampleRate"])} Hz)'))
         finally:
             pa.terminate()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return out
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description="Live lecture transcriber.")
     ap.add_argument("--list-devices", action="store_true")
     ap.add_argument("--device-index", type=int, default=None)
     ap.add_argument("--model", default="large-v3",
@@ -685,13 +622,16 @@ def build_parser() -> argparse.ArgumentParser:
                          "int8_float16 = faster + lighter VRAM")
     ap.add_argument("--language", default=None,
                     help="force a language code, e.g. uk or en (default: auto)")
+    ap.add_argument("--ui-language", default="uk", choices=["uk", "en"],
+                    help="language for markers/toasts/alerts written by the app "
+                         "itself (default: uk)")
     ap.add_argument("--prompt", default=None,
                     help="context hint for rare words (topic, lecturer, jargon)")
     ap.add_argument("--beam-size", type=int, default=5,
                     help="beam search width: 5 = accurate (default), 1 = fastest")
     ap.add_argument("--outfile", default=None,
                     help="append to this exact file instead of creating a new "
-                         "per-session folder 'Записи/Запис DD.MM.YYYY/'")
+                         "per-session folder 'Records/Session DD.MM.YYYY/'")
     ap.add_argument("--duration", type=float, default=0.0,
                     help="stop automatically after this many minutes (0 = run until Ctrl+C)")
     ap.add_argument("--min-silence", type=float, default=0.6,
@@ -734,7 +674,7 @@ def main() -> None:
                 log(text)
             elif kind == "ended":
                 log(f"done. transcript saved to {text}")
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     sess = Session(args, on_event)
@@ -745,9 +685,6 @@ def main() -> None:
             time.sleep(0.3)
     except KeyboardInterrupt:
         log("stopping …")
-        # Poll instead of one long join() so a slow, uninterruptible step (the
-        # model still loading/downloading) gets an occasional reassurance
-        # instead of the console looking hung.
         waited = 0.0
         while sess.alive():
             sess.stop(join_timeout=2.0)

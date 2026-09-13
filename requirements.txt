@@ -1,14 +1,8 @@
-# Normally installed for you by setup.bat (or by start.bat on first run).
-# Manual:  python -m venv .venv
-#          .venv\Scripts\python -m pip install -r requirements.txt
-# GPU (NVIDIA) is optional; without it the script falls back to CPU.
-
 faster-whisper==1.2.1
 PyAudioWPatch==0.2.12.8
 scipy==1.18.1
 numpy==2.5.3
-keyboard==0.13.5         # global hotkeys for in-transcript markers
+keyboard==0.13.5
 
-# CUDA runtime libs for GPU inference (CTranslate2 loads these; Windows/Linux x86-64)
 nvidia-cublas-cu12==12.9.2.10
 nvidia-cudnn-cu12==9.25.1.1

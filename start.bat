@@ -1,12 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-REM Live lecture transcriber - double-click to start, close the window or press Ctrl+C to stop.
-REM Pass extra options through, e.g.:  start.bat --language uk
 cd /d "%~dp0"
 
 set "VPY=.venv\Scripts\python.exe"
 
-REM --- first run / fresh PC: install dependencies before starting ---
 set "NEEDSETUP="
 if not exist "%VPY%" set "NEEDSETUP=1"
 if not defined NEEDSETUP (
@@ -31,5 +28,5 @@ if defined NEEDSETUP (
 
 "%VPY%" -u transcribe.py %*
 echo.
-echo ==== stopped. this run's transcript is under "Zapysy\Zapys DD.MM.YYYY" ====
+echo ==== stopped. this run's transcript is under "Records\Session DD.MM.YYYY" ====
 pause

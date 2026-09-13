@@ -1,19 +1,11 @@
-# virtualenv (2+ GB, recreate with: python -m venv .venv && pip install -r requirements.txt)
 .venv/
-
-# python cache
 __pycache__/
 *.pyc
-
-# recorded transcripts (personal)
 lecture_*.txt
+Records/
 Записи/
-
-# stray scratch audio, if any
 *.wav
 *.ogg
 *.opus
 *.flac
-
-# window settings (per-user)
 gui_settings.json
