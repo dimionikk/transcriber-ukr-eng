@@ -12,7 +12,7 @@ sh.CurrentDirectory = base
 
 On Error Resume Next
 desktop = sh.SpecialFolders("Desktop")
-shortcutPath = desktop & "\Repo Installer.lnk"
+shortcutPath = desktop & "\Lecture Transcriber.lnk"
 If Not fso.FileExists(shortcutPath) Then
     Set sc = sh.CreateShortcut(shortcutPath)
     sc.TargetPath = base & "\Launch.vbs"
