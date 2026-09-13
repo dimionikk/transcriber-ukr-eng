@@ -18,9 +18,7 @@ If Not fso.FileExists(shortcutPath) Then
     sc.TargetPath = base & "\Launch.vbs"
     sc.WorkingDirectory = base
     sc.Description = "Lecture Transcriber"
-    If fso.FileExists(pyw) Then
-        sc.IconLocation = pyw & ", 0"
-    End If
+    sc.IconLocation = "C:\Windows\System32\mmres.dll,5"
     sc.Save
 End If
 On Error Goto 0
