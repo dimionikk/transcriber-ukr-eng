@@ -33,7 +33,16 @@ _register_cuda_dlls()
 
 import numpy as np
 import pyaudiowpatch as pyaudio
-from scipy.signal import resample_poly
+
+try:
+    from scipy.signal import resample_poly
+except Exception as _exc:
+    # scipy.signal transitively imports numpy.random; Windows Smart App Control
+    # has been seen to block that specific compiled file outright (not just a
+    # slow first-time scan), which would otherwise take down this whole module.
+    # Fall back to a plain numpy resampler so recording can still start.
+    resample_poly = None
+    _scipy_import_error = _exc
 
 TARGET_RATE = 16000
 FRAME_MS = 30
@@ -164,6 +173,11 @@ def pick_loopback(pa: pyaudio.PyAudio, device_index):
     for lb in pa.get_loopback_device_info_generator():
         if render["name"] in lb["name"]:
             return lb, render
+    fallback = next(iter(pa.get_loopback_device_info_generator()), None)
+    if fallback is not None:
+        log(f"no loopback match for '{render['name']}'; falling back to "
+            f"'{fallback['name']}' so recording can still start")
+        return fallback, render
     raise RuntimeError(
         "No loopback device found for the default speakers. "
         "Run with --list-devices and pass --device-index."
@@ -257,12 +271,22 @@ class Recorder(threading.Thread):
         self._stop.set()
 
 
+def _resample_linear(buf: np.ndarray, target_rate: int, src_rate: int) -> np.ndarray:
+    n_out = max(1, round(buf.size * target_rate / src_rate))
+    src_x = np.arange(buf.size, dtype=np.float64)
+    dst_x = np.linspace(0, buf.size - 1, n_out, dtype=np.float64)
+    return np.interp(dst_x, src_x, buf).astype(np.float32)
+
+
 def to_mono_16k(buf: np.ndarray, src_rate: int, channels: int) -> np.ndarray:
     if channels > 1:
         buf = buf.reshape(-1, channels).mean(axis=1)
     buf = buf.astype(np.float32) / 32768.0
     if src_rate != TARGET_RATE:
-        buf = resample_poly(buf, TARGET_RATE, src_rate).astype(np.float32)
+        if resample_poly is not None:
+            buf = resample_poly(buf, TARGET_RATE, src_rate).astype(np.float32)
+        else:
+            buf = _resample_linear(buf, TARGET_RATE, src_rate)
     return buf
 
 
@@ -447,6 +471,9 @@ class Session:
     def _run(self) -> None:
         args = self.args
         ui = ui_text(getattr(args, "ui_language", "uk"))
+        if resample_poly is None:
+            self._emit("info", None,
+                        f"scipy unavailable ({_scipy_import_error}); using a simpler resampler")
         pa = pyaudio.PyAudio()
         keepalive = rec = worker = marker = fout = sink = None
         pending = np.empty(0, dtype=np.int16)

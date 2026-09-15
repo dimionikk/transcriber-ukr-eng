@@ -50,6 +50,7 @@ TR = {
                          "Control) або мережа зараз повільна. Це одноразово, "
                          "зачекайте — вікно не зависло.",
         "need_fix_hint": "Бракує компонентів. Натисніть «Встановити / полагодити».",
+        "start_anyway_hint": "Можна спробувати «Почати» і так.",
         "ready_hint": "Готово. Оберіть режим і натисніть «Почати».",
         "running_setup_log": "Запускаю setup.bat …  (це може зайняти кілька хвилин)\n",
         "setup_done_log": "\nГотово.\n",
@@ -117,6 +118,7 @@ TR = {
                          "(Smart App Control) or the network is slow right now. "
                          "This is one-time, please wait — the window is not frozen.",
         "need_fix_hint": "Some components are missing. Click “Install / repair”.",
+        "start_anyway_hint": "You can still try “Start” anyway.",
         "ready_hint": "Ready. Choose the options and click “Start”.",
         "running_setup_log": "Running setup.bat …  (this can take a few minutes)\n",
         "setup_done_log": "\nDone.\n",
@@ -423,6 +425,16 @@ class StartPanel(ttk.Frame):
 
     def _do_check(self):
         rows, ok = check_components()
+        # A required import can transiently fail while Smart App Control is still
+        # evaluating a compiled DLL (numpy/scipy/...) - that check can itself take
+        # up to ~100s, so keep retrying for a while instead of giving up after one try.
+        delay = 2.0
+        waited = 0.0
+        while not ok and waited < 100.0:
+            time.sleep(delay)
+            waited += delay
+            rows, ok = check_components()
+            delay = min(delay * 1.5, 10.0)
         self.q.put(("check", (rows, ok)))
 
     def _render_rows(self, rows):
@@ -445,13 +457,13 @@ class StartPanel(ttk.Frame):
         need_fix = any(st == "bad" for _, st, _ in rows)
         if need_fix:
             self.fix_btn.pack(pady=(8, 0))
-            self.hint.config(text=t("need_fix_hint"))
+            self.hint.config(text=t("need_fix_hint") + "  " + t("start_anyway_hint"))
         else:
             self.fix_btn.pack_forget()
             self.setup_log.pack_forget()
             self.hint.config(text=t("ready_hint"))
-            self._load_devices()
-        self.go.config(state=("disabled" if need_fix else "normal"))
+        self._load_devices()
+        self.go.config(state="normal")
 
     def _fix(self):
         self.fix_btn.config(state="disabled")
@@ -495,10 +507,10 @@ class StartPanel(ttk.Frame):
         top = self.winfo_toplevel()
         if self.adv_open.get():
             self.adv.grid(row=4, column=0, sticky="we", pady=(4, 0))
-            top.geometry("760x920")
+            top.geometry("860x860")
         else:
             self.adv.grid_forget()
-            top.geometry("720x640")
+            top.geometry("800x700")
 
     def _drain(self):
         if not self.winfo_exists():
@@ -522,6 +534,13 @@ class StartPanel(ttk.Frame):
         self.after(120, self._drain)
 
     def _go(self):
+        global T
+        if T is None:
+            try:
+                import transcribe as _t
+                T = _t
+            except Exception:
+                pass
         if T is None:
             messagebox.showerror(t("app_title"), t("engine_not_ready"))
             return
@@ -707,8 +726,8 @@ class MainWindow:
     def __init__(self, root, direct_args=None):
         self.root = root
         self.view = None
-        root.geometry("720x640")
-        root.minsize(560, 420)
+        root.geometry("800x700")
+        root.minsize(620, 460)
         root.protocol("WM_DELETE_WINDOW", self._on_close)
         try:
             style = ttk.Style()
@@ -725,7 +744,7 @@ class MainWindow:
         if self.view is not None:
             self.view.destroy()
         self.root.title(t("app_title"))
-        self.root.geometry("720x640")
+        self.root.geometry("800x700")
         self.view = StartPanel(self.root, on_start=self._start_session,
                                on_relaunch=self._show_panel)
         self.view.pack(fill="both", expand=True)
@@ -734,7 +753,7 @@ class MainWindow:
         if self.view is not None:
             self.view.destroy()
         self.root.title(t("app_title"))
-        self.root.geometry("960x700")
+        self.root.geometry("1040x740")
         self.view = TranscriptView(self.root, args, on_back=self._back_to_panel)
         self.view.pack(fill="both", expand=True)
 
